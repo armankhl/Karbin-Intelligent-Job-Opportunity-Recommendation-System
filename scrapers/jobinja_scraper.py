@@ -8,6 +8,8 @@ from selenium.common.exceptions import NoSuchElementException, TimeoutException 
 from selenium.webdriver.support.ui import WebDriverWait # <-- Add this
 from selenium.webdriver.support import expected_conditions as EC # <-- Add this
 from . import database
+from .preprocessor import DataCleaner
+
 
 class JobinjaScraper:
     def __init__(self, email, password, proxy=None, headless=True):
@@ -15,6 +17,7 @@ class JobinjaScraper:
         self.email = email
         self.password = password
         self.driver = self._setup_driver(proxy, headless)
+        self.cleaner = DataCleaner() 
         logging.basicConfig(filename="scraper.log", level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
 
     def _setup_driver(self, proxy, headless):
@@ -80,32 +83,34 @@ class JobinjaScraper:
             print(f"An unexpected error occurred during login: {e}")
             logging.error(f"Unexpected login error: {e}")
             return False
-
-    def scrape(self, start_page=1, end_page=5):
-        """Main method to start the scraping process."""
-        if not self.login():
-            self.close()
-            return
-        
-        print(f"Starting to scrape from page {start_page} to {end_page}...")
-        for page_num in range(start_page, end_page + 1):
-            list_url = f"{self.base_url}/jobs?page={page_num}"
-            print(f"\n--- Scraping page {page_num}: {list_url} ---")
-            self.driver.get(list_url)
-            time.sleep(2) # Wait for page to load
-
-            job_links = [a.get_attribute('href') for a in self.driver.find_elements(By.CSS_SELECTOR, 'a.c-jobListView__titleLink')]
             
-            for link in job_links:
-                try:
-                    job_data = self.scrape_job_details(link)
-                    if job_data:
-                        database.save_job_posting(job_data)
-                except Exception as e:
-                    print(f"Error processing link {link}: {e}")
-                    logging.error(f"Error on link {link}: {e}")
-        
-        self.close()
+    def scrape(self, start_page=1, end_page=5):
+            """Main method to start the scraping process."""
+            if not self.login():
+                self.close()
+                return
+            
+            print(f"Starting to scrape from page {start_page} to {end_page}...")
+            for page_num in range(start_page, end_page + 1):
+                list_url = f"{self.base_url}/jobs?page={page_num}"
+                print(f"\n--- Scraping page {page_num}: {list_url} ---")
+                self.driver.get(list_url)
+                time.sleep(2) # Wait for page to load
+
+                job_links = [a.get_attribute('href') for a in self.driver.find_elements(By.CSS_SELECTOR, 'a.c-jobListView__titleLink')]
+                
+                for link in job_links:
+                    try:
+                        raw_job_data = self.scrape_job_details(link)
+                        if raw_job_data:
+                            cleaned_job_data = self.cleaner.preprocess_job_data(raw_job_data)
+                            database.save_job_posting(cleaned_job_data)
+                    except Exception as e:
+                        print(f"Error processing link {link}: {e}")
+                        logging.error(f"Error on link {link}: {e}")
+            
+                self.close()
+                
 # In class JobinjaScraper:
     def scrape_job_details(self, link):
         """Scrapes all details from a single job page using explicit waits."""

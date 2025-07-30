@@ -39,3 +39,4 @@ sentence-transformers==3.0.1 # Simplifies using models for sentence embeddings (
 # --- Utility Libraries ---
 python-dotenv==1.0.1      # For managing environment variables from a .env file
 gunicorn==22.0.0          # WSGI HTTP Server for deploying Flask/Django in production
+
