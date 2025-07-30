@@ -20,4 +20,4 @@ if __name__ == "__main__":
         scraper = JobinjaScraper(email=email, password=password, proxy=proxy, headless=headless)
 
 
-        scraper.scrape(start_page=8, end_page=9) 
+        scraper.scrape(start_page=10, end_page=10) 
