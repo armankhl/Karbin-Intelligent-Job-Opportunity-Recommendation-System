@@ -7,13 +7,17 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException # <-- Add TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait # <-- Add this
 from selenium.webdriver.support import expected_conditions as EC # <-- Add this
-from . import database
+from .database import save_job_posting 
 from .preprocessor import DataCleaner
+from selenium.common.exceptions import TimeoutException
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
 
 
 class JobinjaScraper:
     def __init__(self, email, password, proxy=None, headless=True):
-        self.base_url = "https://jobinja.ir"
+        self.login_url = "https://jobinja.ir/login/user"
+        self.jobs_path = "/jobs/latest-job-post-استخدامی-جدید"
         self.email = email
         self.password = password
         self.driver = self._setup_driver(proxy, headless)
@@ -31,57 +35,54 @@ class JobinjaScraper:
             options.add_argument(f'--proxy-server={proxy}')
         
         return webdriver.Chrome(options=options)
+# In class JobinjaScraper:
 
-    # In class JobinjaScraper:
     def login(self):
         """Logs into jobinja.ir using explicit waits for robustness."""
-        login_url = f"{self.base_url}/login/user"
-        self.driver.get(login_url)
+        self.driver.get(self.login_url)
         try:
             print("Attempting to log in...")
             
-            # --- START OF CHANGES ---
-            # Wait up to 10 seconds for the email field to be visible before trying to interact with it
+            # --- EXPLICIT WAIT ---
+            # Wait up to 10 seconds for the email input field to be present on the page.
             wait = WebDriverWait(self.driver, 10)
-            
-            email_field = wait.until(EC.visibility_of_element_located((By.CSS_SELECTOR, "#identifier")))
+            email_input_selector = (By.CSS_SELECTOR, "#identifier")
+            password_input_selector = (By.CSS_SELECTOR, "#password")
+            submit_button_selector = (By.CSS_SELECTOR, "input[type=submit]")
+
+            # Wait for the element to be visible and then send keys
+            email_field = wait.until(EC.visibility_of_element_located(email_input_selector))
             email_field.send_keys(self.email)
             
-            # The password field is usually available right after the email field
-            password_field = self.driver.find_element(By.CSS_SELECTOR, "#password")
-            password_field.send_keys(self.password)
+            # The password field should be available now too
+            self.driver.find_element(*password_input_selector).send_keys(self.password)
             
-            submit_button = self.driver.find_element(By.CSS_SELECTOR, "input[type=submit]")
-            submit_button.click()
-            # --- END OF CHANGES ---
+            # Click the submit button
+            self.driver.find_element(*submit_button_selector).click()
             
-            # Wait until the URL no longer contains '/login'
-            # This is a better way to check for successful login
-            print("Waiting for login redirect...")
-            wait.until(EC.url_changes(login_url))
-
-            if '/login' in self.driver.current_url:
-                print("Login failed. The page reloaded but is still on the login page. Check credentials or CAPTCHA.")
-                logging.warning("Login failed.")
-                return False
-
+            # --- WAIT FOR LOGIN TO COMPLETE ---
+            # Instead of a fixed time.sleep(), wait for the URL to no longer contain '/login'
+            wait.until_not(EC.url_contains('/login'))
+            
             print("Login successful.")
             logging.info("Login successful.")
             return True
 
         except TimeoutException:
-            # This will catch the error if the email field doesn't appear after 10 seconds
-            print("Login failed: Timed out waiting for login page elements to load.")
-            logging.error("Login page elements not found.")
-            # Let's save a screenshot to see what the page looks like
-            self.driver.save_screenshot('login_error_screenshot.png')
-            print("Screenshot saved to 'login_error_screenshot.png' for debugging.")
+            # This will catch the error if any of the `wait.until` conditions fail
+            print("Login failed: Timed out waiting for login page elements or for login to complete.")
+            logging.error("Login page elements not found or login redirection failed.")
+            
+            # Let's save a screenshot to see what the page actually looks like
+            screenshot_path = 'login_error_screenshot.png'
+            self.driver.save_screenshot(screenshot_path)
+            print(f"Screenshot saved to '{screenshot_path}' for debugging.")
             return False
             
         except Exception as e:
             # Catch any other unexpected errors
             print(f"An unexpected error occurred during login: {e}")
-            logging.error(f"Unexpected login error: {e}")
+            logging.error(f"Unexpected login error: {e}", exc_info=True)
             return False
             
     def scrape(self, start_page=1, end_page=5):
@@ -92,30 +93,33 @@ class JobinjaScraper:
             
             print(f"Starting to scrape from page {start_page} to {end_page}...")
             for page_num in range(start_page, end_page + 1):
-                list_url = f"{self.base_url}/jobs?page={page_num}"
+                list_url = f"https://jobinja.ir{self.jobs_path}"
+                if page_num > 1:
+                    list_url += f"?page={page_num}"
+
                 print(f"\n--- Scraping page {page_num}: {list_url} ---")
                 self.driver.get(list_url)
-                time.sleep(2) # Wait for page to load
+                time.sleep(2)
 
                 job_links = [a.get_attribute('href') for a in self.driver.find_elements(By.CSS_SELECTOR, 'a.c-jobListView__titleLink')]
-                
+            
                 for link in job_links:
                     try:
                         raw_job_data = self.scrape_job_details(link)
                         if raw_job_data:
                             cleaned_job_data = self.cleaner.preprocess_job_data(raw_job_data)
-                            database.save_job_posting(cleaned_job_data)
+                            save_job_posting(cleaned_job_data) # Assuming save_job_posting is imported
                     except Exception as e:
                         print(f"Error processing link {link}: {e}")
                         logging.error(f"Error on link {link}: {e}")
             
-                self.close()
+            self.close()
                 
 # In class JobinjaScraper:
     def scrape_job_details(self, link):
         """Scrapes all details from a single job page using explicit waits."""
         self.driver.get(link)
-        
+        time.sleep(1)
         try:
             # Use an explicit wait for the main job container to ensure the page is loaded
             wait = WebDriverWait(self.driver, 10)
