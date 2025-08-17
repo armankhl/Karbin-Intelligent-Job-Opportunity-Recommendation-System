@@ -13,11 +13,22 @@ if __name__ == "__main__":
     password = os.getenv("JOBINJA_PASSWORD")
     proxy = os.getenv("PROXY_SERVER")
     headless = os.getenv("HEADLESS_MODE", 'True').lower() == 'true'
+    USE_HEADLESS_MODE = False 
+    PROXY_TO_USE = None 
 
-    if not email or not password:
-        print("Error: JOBINJA_EMAIL and JOBINJA_PASSWORD must be set in the .env file.")
-    else:
-        scraper = JobinjaScraper(email=email, password=password, proxy=proxy, headless=headless)
+if not email or not password:
+    print("Error: JOBINJA_EMAIL and JOBINJA_PASSWORD must be set in the .env file.")
+else:
+    print(f"--- Starting Scraper ---")
+    print(f"Headless Mode: {USE_HEADLESS_MODE}")
+    print(f"Proxy Server: {PROXY_TO_USE if PROXY_TO_USE else 'Disabled'}")
 
-
-        scraper.scrape(start_page=1, end_page=50)
+    scraper = JobinjaScraper(
+        email=email, 
+        password=password, 
+        proxy=PROXY_TO_USE, 
+        headless=USE_HEADLESS_MODE
+    )
+    
+    # Scrape only 1 page and 5 jobs for a quick test
+    scraper.scrape(start_page=1, end_page=1)
