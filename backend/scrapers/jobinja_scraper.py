@@ -8,11 +8,14 @@ from selenium.webdriver.common.by import By
 from selenium.common.exceptions import NoSuchElementException, TimeoutException
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
-from .database import save_job_posting 
+from . import database 
 from .preprocessor import DataCleaner
-
-# Import the Service class
 from selenium.webdriver.chrome.service import Service
+
+# This gets the directory where this script (jobinja_scraper.py) is located.
+SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
+# This joins that directory path with the filename.
+DRIVER_PATH = os.path.join(SCRIPT_DIR, "chromedriver.exe")
 
 class JobinjaScraper:
     def __init__(self, email, password, proxy=None, headless=True):
@@ -36,7 +39,7 @@ class JobinjaScraper:
         if proxy and proxy.lower() != 'none':
             options.add_argument(f'--proxy-server={proxy}')
         
-        service = Service(executable_path="chromedriver.exe")
+        service = Service(executable_path=DRIVER_PATH)
         driver = webdriver.Chrome(service=service, options=options)
         
         driver.set_page_load_timeout(30)

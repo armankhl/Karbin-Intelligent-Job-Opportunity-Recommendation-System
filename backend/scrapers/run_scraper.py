@@ -1,11 +1,11 @@
 
 # run_scraper.py
 import os
-from dotenv import load_dotenv
-from scrapers.jobinja_scraper import JobinjaScraper
+from dotenv import load_dotenv, find_dotenv
+from .jobinja_scraper import JobinjaScraper
 
 # Load environment variables from .env file
-load_dotenv()
+load_dotenv(find_dotenv())
 
 if __name__ == "__main__":
     # Get configuration from environment variables
@@ -14,19 +14,18 @@ if __name__ == "__main__":
     proxy = os.getenv("PROXY_SERVER")
     headless = os.getenv("HEADLESS_MODE", 'True').lower() == 'true'
     USE_HEADLESS_MODE = False 
-    PROXY_TO_USE = None 
 
 if not email or not password:
     print("Error: JOBINJA_EMAIL and JOBINJA_PASSWORD must be set in the .env file.")
 else:
     print(f"--- Starting Scraper ---")
     print(f"Headless Mode: {USE_HEADLESS_MODE}")
-    print(f"Proxy Server: {PROXY_TO_USE if PROXY_TO_USE else 'Disabled'}")
+    print(f"Proxy Server: {proxy if proxy else 'Disabled'}")
 
     scraper = JobinjaScraper(
         email=email, 
         password=password, 
-        proxy=PROXY_TO_USE, 
+        proxy=proxy, 
         headless=USE_HEADLESS_MODE
     )
     
