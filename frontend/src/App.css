@@ -31,14 +31,21 @@ body {
   text-decoration: none;
 }
 
+.nav-links {
+  display: flex;
+  align-items: center;
+  gap: 40px; /* This is the new magic line! It adds 40px of space between each link. */
+}
+
+/* Then, find the rule for the links and remove the margin */
 .nav-links a {
   color: #555;
   text-decoration: none;
-  margin: 0 20px;
   font-size: 1rem;
   font-weight: 500;
   transition: color 0.3s ease;
-}
+  }
+
 
 .nav-links a:hover {
   color: #000;

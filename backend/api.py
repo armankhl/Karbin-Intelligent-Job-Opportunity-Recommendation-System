@@ -24,33 +24,34 @@ def get_db_connection():
     return conn
 
 @app.route('/api/jobs/latest', methods=['GET'])
+@app.route('/api/jobs/latest', methods=['GET'])
 def get_latest_jobs():
-    """API endpoint to fetch the 5 most recent job postings."""
+    """API endpoint to fetch the N most recent job postings."""
+    
+    # Define the limit as a variable here
+    postings_limit = 6
+
     jobs = []
     conn = get_db_connection()
     try:
         with conn.cursor() as cur:
-            # Query to get the latest 5 jobs, joining with the companies table
-            cur.execute("""
+            sql_query = """
                 SELECT 
-                    jp.id, 
-                    jp.title, 
-                    c.name AS company_name, 
-                    jp.city, 
-                    jp.source_link
+                    jp.id, jp.title, c.name AS company_name, jp.city, jp.source_link
                 FROM 
                     job_postings jp
                 JOIN 
                     companies c ON jp.company_id = c.id
                 ORDER BY 
                     jp.scraped_at DESC
-                LIMIT 5;
-            """)
+                LIMIT %s;
+            """
+            # Pass the variable as a parameter to the execute method
+            cur.execute(sql_query, (postings_limit,))
+            
             rows = cur.fetchall()
-            # Get column names from the cursor description
             columns = [desc[0] for desc in cur.description]
             for row in rows:
-                # Create a dictionary for each job posting
                 jobs.append(dict(zip(columns, row)))
                 
     except Exception as e:
@@ -60,6 +61,7 @@ def get_latest_jobs():
         conn.close()
         
     return jsonify(jobs)
+
 
 if __name__ == '__main__':
     # Runs the API on http://127.0.0.1:5000
