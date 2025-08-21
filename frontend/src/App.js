@@ -2,12 +2,16 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
 import './App.css';
 import HomePage from './HomePage';
+import UserLogin from './pages/auth/UserLogin';
+import LoginPassword from './pages/auth/LoginPassword';
+import UserSignup from './pages/auth/UserSignup';
 
 // Placeholders for the new pages
 const JobsPage = () => <div style={{textAlign: 'center', padding: '50px'}}><h2>صفحه فرصت‌های شغلی</h2></div>;
 const ResumeBuilderPage = () => <div style={{textAlign: 'center', padding: '50px'}}><h2>صفحه رزومه‌ساز</h2></div>;
 const ForEmployersPage = () => <div style={{textAlign: 'center', padding: '50px'}}><h2>صفحه کارفرمایان</h2></div>;
-
+const ForgotPassword = () => <div>Forgot Password Page</div>;
+const VerifyEmail = () => <div>Verify Email Page</div>;
 
 function App() {
   return (
@@ -18,6 +22,11 @@ function App() {
           <Route path="/jobs" element={<JobsPage />} />
           <Route path="/resume-builder" element={<ResumeBuilderPage />} />
           <Route path="/for-employers" element={<ForEmployersPage />} />
+          <Route path="/login" element={<UserLogin />} />
+          <Route path="/login-password" element={<LoginPassword />} />
+          <Route path="/signup" element={<UserSignup />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
       </div>
     </Router>

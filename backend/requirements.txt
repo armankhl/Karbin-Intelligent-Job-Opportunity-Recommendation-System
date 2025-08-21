@@ -16,3 +16,4 @@ pandas==2.2.2
 
 Flask
 Flask-CORS
+Flask-Bcrypt
