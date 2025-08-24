@@ -5,6 +5,7 @@ import HomePage from './HomePage';
 import UserLogin from './pages/auth/UserLogin';
 import LoginPassword from './pages/auth/LoginPassword';
 import UserSignup from './pages/auth/UserSignup';
+import ProfilePage from './pages/ProfilePage'; 
 
 // Placeholders for the new pages
 const JobsPage = () => <div style={{textAlign: 'center', padding: '50px'}}><h2>صفحه فرصت‌های شغلی</h2></div>;
@@ -27,6 +28,7 @@ function App() {
           <Route path="/signup" element={<UserSignup />} />
           <Route path="/forgot-password" element={<ForgotPassword />} />
           <Route path="/verify-email" element={<VerifyEmail />} />
+          <Route path="/profile" element={<ProfilePage />} />
         </Routes>
       </div>
     </Router>
