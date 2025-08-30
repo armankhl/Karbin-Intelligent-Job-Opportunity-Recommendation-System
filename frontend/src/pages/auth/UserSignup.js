@@ -19,8 +19,10 @@ const UserSignup = () => {
         }
         try {
             await axios.post('http://127.0.0.1:5000/api/auth/register', { name, email, password });
-            alert('ثبت نام شما با موفقیت انجام شد.');
-            navigate('/');
+            if (response.data.access_token) {
+              login(response.data.access_token); // Save the token
+              navigate('/');
+          }
         } catch (error) {
             console.error('Registration failed:', error);
             alert('Registration failed. Email might already be in use.');
