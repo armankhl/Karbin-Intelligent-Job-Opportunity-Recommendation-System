@@ -5,12 +5,39 @@ from flask_jwt_extended import create_access_token, JWTManager
 import os
 from dotenv import load_dotenv
 import psycopg2
+import faiss
+import numpy as np
+from services.recommendation_service import get_user_vector, get_filtered_job_ids
 
+# --- Load Recommendation Artifacts at Startup ---
+FAISS_INDEX_PATH = os.path.join('data', 'job_index.faiss')
+JOB_ID_MAP_PATH = os.path.join('data', 'job_id_map.npy')
+faiss_index = None
+job_id_map = None
+job_id_to_faiss_idx = {}
+
+try:
+    print("Loading FAISS index...")
+    faiss_index = faiss.read_index(FAISS_INDEX_PATH)
+    print(f"FAISS index loaded. Contains {faiss_index.ntotal} vectors.")
+    
+    print("Loading job ID map...")
+    job_id_map = np.load(JOB_ID_MAP_PATH)
+    
+    # Create a reverse map for quick lookups: DB Job ID -> FAISS Index Position
+    job_id_to_faiss_idx = {job_id: i for i, job_id in enumerate(job_id_map)}
+    print("Job ID map loaded and reverse map created.")
+    
+except FileNotFoundError:
+    print("Warning: FAISS index or job ID map not found. Recommendation endpoint will be disabled.")
+except Exception as e:
+    print(f"An error occurred while loading recommendation artifacts: {e}")
+    
 
 load_dotenv()
 
 app = Flask(__name__)
-bcrypt = Bcrypt(app)           # <-- FIX #2: This line initializes the bcrypt object.
+bcrypt = Bcrypt(app)
 CORS(app)
 
 # --- Setup JWT ---

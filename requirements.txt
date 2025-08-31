@@ -18,3 +18,7 @@ Flask
 Flask-CORS
 Flask-Bcrypt
 Flask-JWT-Extended
+sentence-transformers 
+torch 
+faiss-cpu 
+scikit-learn
