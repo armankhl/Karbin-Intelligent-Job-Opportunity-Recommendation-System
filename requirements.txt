@@ -22,3 +22,5 @@ sentence-transformers
 torch 
 faiss-cpu 
 scikit-learn
+
+sib-api-v3-sdk

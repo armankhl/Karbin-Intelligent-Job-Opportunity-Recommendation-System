@@ -31,24 +31,24 @@ class DataCleaner:
     SALARY_NEGOTIABLE = "توافقی"
     SALARY_BASE_LAW = "قانون کار"
 
-    # --- Pre-compiled Regex Patterns ---
     _PATTERNS = {
+        'numeric_range': re.compile(r'^(\d+)\s*-\s*(\d+)$'),
+        'numeric_single': re.compile(r'^(\d+)$'),
         'range': re.compile(r'\b([\w\d]+)\b\s*تا\s*\b([\w\d]+)\b\s*سال'),
         'more_than': re.compile(r'بیش از\s*\b([\w\d]+)\b\s*سال'),
         'less_than': re.compile(r'کمتر از\s*\b([\w\d]+)\b\s*سال'),
         'at_least': re.compile(r'حداقل\s*\b([\w\d]+)\b\s*سال'),
         'numeric_salary': re.compile(r'\d[\d,.]*')
     }
-
     def __init__(self):
-        # Data-driven rule set for cleaning experience
         self.experience_rules = [
+            (self._PATTERNS['numeric_range'], self._handle_exp_numeric_range),
+            (self._PATTERNS['numeric_single'], self._handle_exp_numeric_single),
             (self._PATTERNS['range'], self._handle_exp_range),
             (self._PATTERNS['more_than'], self._handle_exp_more_than),
             (self._PATTERNS['less_than'], self._handle_exp_less_than),
             (self._PATTERNS['at_least'], self._handle_exp_at_least),
         ]
-
     # --- Private Helper Methods ---
     def _get_number_from_string(self, s):
         s = s.strip()
@@ -60,23 +60,23 @@ class DataCleaner:
         if not text: return None
         return re.sub(r'\s+', ' ', str(text)).strip()
 
-    # --- Experience Rule Handlers ---
     def _handle_exp_range(self, match):
         num1 = self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
         num2 = self._get_number_from_string(convert_persian_to_english_numbers(match.group(2)))
-        return f"{min(num1, num2)}-{max(num1, num2)}" if num1 is not None and num2 is not None else None
+        # Return the smaller of the two numbers in the range
+        return min(num1, num2) if num1 is not None and num2 is not None else None
 
     def _handle_exp_more_than(self, match):
-        num = self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
-        return str(num) if num is not None else None
+        # "More than 3 years" means the minimum is 3
+        return self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
 
     def _handle_exp_less_than(self, match):
-        num = self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
-        return f"0-{num}" if num is not None else None
+        # "Less than 3 years" implies a minimum of 0
+        return 0
     
     def _handle_exp_at_least(self, match):
-        num = self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
-        return str(num) if num is not None else None
+        # "At least 3 years" means the minimum is 3
+        return self._get_number_from_string(convert_persian_to_english_numbers(match.group(1)))
 
     # --- Public Cleaning Methods ---
     def clean_salary(self, salary_text):
@@ -95,21 +95,19 @@ class DataCleaner:
         logging.warning(f"Could not parse salary: '{salary_text}'. Falling back to '{self.SALARY_NEGOTIABLE}'.")
         return self.SALARY_NEGOTIABLE
 
-    def clean_experience(self, exp_text):
+    def clean_experience(self, exp_text: str) -> int:
         cleaned_text = self._clean_text(exp_text)
         if not cleaned_text or "مهم نیست" in cleaned_text or "اهمیت" in cleaned_text:
-            return "0"
-
+            return 0
         for pattern, handler in self.experience_rules:
             match = pattern.search(cleaned_text)
             if match:
                 result = handler(match)
-                if result:
-                    return result
+                if result is not None:
+                    return int(result)
+        logging.warning(f"Could not parse experience: '{exp_text}'. Defaulting to 0.")
+        return 0
         
-        logging.warning(f"Could not parse experience: '{exp_text}'. Using cleaned original text.")
-        return cleaned_text
-
     def clean_gender(self, gender_text):
         cleaned_text = self._clean_text(gender_text)
         if not cleaned_text: return self.GENDER_ANY

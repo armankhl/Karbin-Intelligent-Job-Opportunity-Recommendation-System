@@ -43,8 +43,8 @@ def _build_user_text(user_id: int) -> str:
             if profile_res:
                 prof_title, seniority, cities = profile_res
                 full_text_parts.append(prof_title or "")
-                full_text_parts.append(seniority or "")
-                full_text_parts.append(cities.replace(',', ' ') if cities else "")
+                # full_text_parts.append(seniority or "")
+                # full_text_parts.append(cities.replace(',', ' ') if cities else "")
 
             # 2. Fetch skills from user_skills
             cur.execute("""
@@ -55,7 +55,7 @@ def _build_user_text(user_id: int) -> str:
             skills_res = cur.fetchall()
             if skills_res:
                 skills_text = ", ".join([row[0] for row in skills_res])
-                full_text_parts.append(f"Skills: {skills_text}")
+                # full_text_parts.append(f"Skills: {skills_text}")
 
             # 3. Fetch work experience descriptions
             cur.execute("""
@@ -65,7 +65,7 @@ def _build_user_text(user_id: int) -> str:
             exp_res = cur.fetchall()
             if exp_res:
                 experience_text = " ".join([row[0] for row in exp_res])
-                full_text_parts.append(f"Work history: {experience_text}")
+                # full_text_parts.append(f"Work history: {experience_text}")
 
     except Exception as e:
         print(f"Error building user text for user_id {user_id}: {e}")
@@ -92,48 +92,60 @@ def get_user_vector(user_id: int) -> np.ndarray | None:
     user_embedding = embed_texts([user_text])
     return user_embedding[0] # Return the first (and only) embedding
 
-# --- 3. HARD FILTERING ---
-
 def get_filtered_job_ids(user_id: int) -> list[int]:
     """
-    Applies hard filters based on user preferences to get a candidate set of job IDs.
+    Applies hard filters using the new structured columns for high efficiency.
     """
     conn = get_db_connection()
     if not conn:
         return []
 
-    preferences = {'cities': [], 'employment_types': []}
     candidate_job_ids = []
-    
     try:
         with conn.cursor() as cur:
-            # 1. Fetch user's preferences
-            cur.execute(
-                "SELECT preferred_cities, employment_types FROM user_profiles WHERE user_id = %s",
-                (user_id,)
-            )
-            pref_res = cur.fetchone()
-            if pref_res:
-                # Split comma-separated strings into lists, filtering out empty strings
-                preferences['cities'] = [city.strip() for city in (pref_res[0] or "").split(',') if city.strip()]
-                preferences['employment_types'] = [etype.strip() for etype in (pref_res[1] or "").split(',') if etype.strip()]
-
+            # 1. Fetch user's new structured preferences
+            cur.execute("""
+                SELECT preferred_provinces, wants_full_time, wants_part_time,
+                       wants_remote, wants_onsite, wants_internship
+                FROM user_profiles WHERE user_id = %s
+            """, (user_id,))
+            
+            prefs = cur.fetchone()
+            if not prefs: return []
+            
+            provinces, full_time, part_time, remote, onsite, internship = prefs
+            
             # 2. Build the dynamic SQL query
-            base_query = "SELECT id FROM job_postings WHERE is_active = TRUE AND scraped_at >= NOW() - INTERVAL '45 days'"
+            query_parts = ["SELECT id FROM job_postings WHERE is_active = TRUE AND scraped_at >= NOW() - INTERVAL '45 days'"]
             params = []
             
-            # Add city filter if the user has specified any
-            if preferences['cities']:
-                base_query += " AND city = ANY(%s)"
-                params.append(preferences['cities'])
+            # Province filtering
+            if provinces:
+                preferred_provinces = [p.strip() for p in provinces.split(',')]
+                query_parts.append("AND province = ANY(%s)")
+                params.append(preferred_provinces)
 
-            # Add employment type filter if the user has specified any
-            if preferences['employment_types']:
-                base_query += " AND contract_type = ANY(%s)"
-                params.append(preferences['employment_types'])
+            # Internship filtering
+            if internship:
+                query_parts.append("AND is_internship = TRUE")
 
-            # 3. Execute the query and fetch job IDs
-            cur.execute(base_query, params)
+            # Time commitment filtering
+            if full_time and not part_time:
+                query_parts.append("AND is_full_time = TRUE")
+            elif part_time and not full_time:
+                query_parts.append("AND is_part_time = TRUE")
+            # If user wants both, we don't add a filter (or could use `is_full_time OR is_part_time`)
+
+            # Location type filtering
+            if remote and not onsite:
+                query_parts.append("AND is_remote = TRUE")
+            # If user wants onsite but not remote, we can filter for non-remote jobs
+            elif onsite and not remote:
+                 query_parts.append("AND is_remote = FALSE")
+
+            # 3. Execute query
+            final_query = " ".join(query_parts)
+            cur.execute(final_query, params)
             candidate_job_ids = [row[0] for row in cur.fetchall()]
 
     except Exception as e:
@@ -149,7 +161,7 @@ if __name__ == "__main__":
     
     # We will test with the user we created in the previous steps.
     # Make sure this user has a complete profile in your database.
-    TEST_USER_ID = 1
+    TEST_USER_ID = 2
 
     # --- Test 1: Generate User Vector ---
     print(f"\n1. Generating vector for user_id: {TEST_USER_ID}")

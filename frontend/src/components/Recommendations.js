@@ -1,31 +1,35 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import axios from 'axios'; // Use axios directly
 import { useAuth } from '../context/AuthContext';
 
 const Recommendations = () => {
     const [recommendations, setRecommendations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
-    const { isAuthenticated } = useAuth();
+    const { isAuthenticated, token, logout } = useAuth(); // Get token and logout
 
     useEffect(() => {
-        if (!isAuthenticated) return;
+        if (!isAuthenticated) {
+            setLoading(false);
+            return;
+        }
 
         const fetchRecommendations = async () => {
+            if (!isAuthenticated || !token) {
+                setLoading(false);
+                return;
+            }
+
             try {
-                const token = localStorage.getItem('authToken');
-                if (!token) {
-                    throw new Error("No auth token found");
-                }
-                
                 const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=6', {
-                    headers: {
-                        'Authorization': `Bearer ${token}`
-                    }
+                    headers: { 'Authorization': `Bearer ${token}` }
                 });
                 setRecommendations(response.data);
             } catch (err) {
                 setError('Could not fetch recommendations.');
+                if (err.response && [401, 422].includes(err.response.status)) {
+                    logout();
+                }
                 console.error(err);
             } finally {
                 setLoading(false);
@@ -33,7 +37,11 @@ const Recommendations = () => {
         };
 
         fetchRecommendations();
-    }, [isAuthenticated]);
+    }, [isAuthenticated, token, logout]);
+
+    if (!isAuthenticated) {
+        return null;
+    }
 
     if (loading) {
         return <div className="container"><p>در حال بارگذاری پیشنهادات شغلی برای شما...</p></div>;

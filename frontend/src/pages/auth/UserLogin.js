@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from 'axios'; // Use axios directly
 import '../../AuthForm.css';
 
 const UserLogin = () => {
@@ -10,20 +10,19 @@ const UserLogin = () => {
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
+      // FIX: Use the 'api' client and a relative path
       const response = await axios.post('http://127.0.0.1:5000/api/auth/check-email', { email });
       if (response.data.exists) {
-        // If email exists, go to password page, passing the email along
         navigate('/login-password', { state: { email } });
       } else {
-        // If email doesn't exist, go to signup page, passing the email
         navigate('/signup', { state: { email } });
       }
     } catch (error) {
       console.error('Error checking email:', error);
-      // Handle error (e.g., show a notification to the user)
     }
   };
 
+  // ... (The JSX part of the component is unchanged and correct) ...
   return (
     <div className="auth-container">
       <div className="auth-logo">▲■●</div>
@@ -37,6 +36,8 @@ const UserLogin = () => {
           value={email}
           onChange={(e) => setEmail(e.target.value)}
           required
+          name="email"
+          autoComplete="email"
         />
         <button type="submit" className="auth-button-primary">ورود</button>
         <a href="/employer-login" className="auth-link">کارفرما هستید؟ ورود به بخش کارفرمایی</a>

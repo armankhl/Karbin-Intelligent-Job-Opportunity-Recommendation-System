@@ -1,31 +1,32 @@
 import React, { useState } from 'react';
 import { useLocation, Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
+import axios from 'axios'; // Use axios directly
 import '../../AuthForm.css';
 import { useAuth } from '../../context/AuthContext';
 
-
 const LoginPassword = () => {
   const location = useLocation();
-  const email = location.state?.email; // Get email from previous page
+  const email = location.state?.email;
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
-  const { login } = useAuth(); // Get the login function from context
+  const { login } = useAuth();
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-        const response = await axios.post('http://127.0.0.1:5000/api/auth/login', { email, password });
-        if (response.data.access_token) {
-            login(response.data.access_token); // Save the token
-            navigate('/');
-        }
+      // FIX: Use the 'api' client and a relative path
+      const response = await axios.post('http://127.0.0.1:5000/api/auth/login', { email, password });
+      if (response.data.access_token) {
+          login(response.data.access_token);
+          navigate('/');
+      }
     } catch (error) {
       console.error('Login failed:', error);
       alert('Login failed: Invalid credentials.');
     }
   };
 
-
+  // ... (The JSX part of the component is unchanged and correct) ...
   return (
     <div className="auth-container">
       <div className="auth-logo">▲■●</div>
@@ -39,6 +40,8 @@ const LoginPassword = () => {
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           required
+          name="password"
+          autoComplete="current-password"
         />
         <button type="submit" className="auth-button-primary">ورود</button>
         <Link to="/forgot-password" className="auth-link">رمز عبور خود را فراموش کرده‌اید؟</Link>

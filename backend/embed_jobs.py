@@ -104,7 +104,8 @@ def main():
                 skills = skills or ""
 
                 # Construct the comprehensive text as planned in the roadmap
-                full_text = f"{title}. {category} in {city}. Skills: {skills}. Description: {description}"
+                # full_text = f"{title}. {category} in {city}. Skills: {skills}. Description: {description}"
+                full_text = f"{title}. {category}"
                 
                 job_ids.append(job_id)
                 texts_to_embed.append(full_text)
