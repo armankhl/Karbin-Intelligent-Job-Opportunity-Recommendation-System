@@ -30,4 +30,4 @@ else:
     )
     
     # Scrape only 1 page and 5 jobs for a quick test
-    scraper.scrape(start_page=2, end_page=2)
+    scraper.scrape(start_page=1, end_page=800)

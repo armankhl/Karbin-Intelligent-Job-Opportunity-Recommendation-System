@@ -1,49 +1,127 @@
-import React, { useState, useEffect } from 'react';
-import axios from 'axios';
+import React, { useState, useEffect, useRef } from 'react';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import './ProfilePage.css';
+import axios from 'axios'; // Use axios directly
+import { useAuth } from '../context/AuthContext'; // FIX 2: Import useAuth
 
-const LOGGED_IN_USER_ID = 1;
+const IRAN_PROVINCES = [
+    'آذربایجان شرقی', 'آذربایجان غربی', 'اردبیل', 'اصفهان', 'البرز', 'ایلام', 'بوشهر',
+    'تهران', 'چهارمحال و بختیاری', 'خراسان جنوبی', 'خراسان رضوی', 'خراسان شمالی',
+    'خوزستان', 'زنجان', 'سمنان', 'سیستان و بلوچستان', 'فارس', 'قزوین', 'قم', 'کردستان',
+    'کرمان', 'کرمانشاه', 'کهگیلویه و بویراحمد', 'گلستان', 'گیلان', 'لرستان', 'مازندران',
+    'مرکزی', 'هرمزگان', 'همدان', 'یزد'
+];
+
+const EXPERIENCE_LEVELS = [
+    { value: 0, label: 'کمتر از یک سال' },
+    { value: 1, label: 'یک تا سه سال' },
+    { value: 3, label: 'سه تا شش سال' },
+    { value: 6, label: 'بیش از شش سال' }
+];
 
 const ProfilePage = () => {
+    const { isAuthenticated, token, logout } = useAuth(); // Get token and logout
     const [profile, setProfile] = useState({
         first_name: '', last_name: '', phone_number: '', professional_title: '',
-        seniority_level: 'Junior', employment_types: [], preferred_cities: [], expected_salary: ''
+        expected_salary: '', wants_full_time: false, wants_part_time: false,
+        wants_remote: false, wants_onsite: false, wants_internship: false, experience_level: 0,
+        preferred_provinces: [], preferred_category_id: '',
     });
     const [workExperiences, setWorkExperiences] = useState([]);
     const [educations, setEducations] = useState([]);
     const [skills, setSkills] = useState([]);
+    const [provinceSearch, setProvinceSearch] = useState('');
+    const [isProvinceDropdownOpen, setProvinceDropdownOpen] = useState(false);
+    const provinceRef = useRef(null);
+    const [categories, setCategories] = useState([]);
+
 
     useEffect(() => {
         const fetchProfile = async () => {
+            // Guard clause: only fetch if authenticated and token exists.
+            if (!isAuthenticated || !token) return;
+
+            // --- FIX 1: Correctly structured try...catch block ---
             try {
-                const response = await axios.get(`http://127.0.0.1:5000/api/profile/${LOGGED_IN_USER_ID}`);
+                // FIX 2: Use the secure, JWT-based endpoint
+                const response = await axios.get('http://127.0.0.1:5000/api/profile', {
+                    headers: { 'Authorization': `Bearer ${token}` }
+                });
+
                 const data = response.data;
                 if (data && data.user_id) {
                     setProfile({
                         first_name: data.first_name || '', last_name: data.last_name || '',
                         phone_number: data.phone_number || '', professional_title: data.professional_title || '',
-                        seniority_level: data.seniority_level || 'Junior',
-                        employment_types: data.employment_types ? data.employment_types.split(',').filter(t => t) : [],
-                        preferred_cities: data.preferred_cities ? data.preferred_cities.split(',').filter(c => c) : [],
+                        wants_full_time: data.wants_full_time || false,
+                        wants_part_time: data.wants_part_time || false,
+                        wants_remote: data.wants_remote || false,
+                        wants_onsite: data.wants_onsite || false,
+                        wants_internship: data.wants_internship || false,
+                        preferred_provinces: data.preferred_provinces ? data.preferred_provinces.split(',').filter(p => p) : [],
                         expected_salary: data.expected_salary || ''
                     });
                     setWorkExperiences(data.work_experiences || []);
                     setEducations(data.educations || []);
                     setSkills(data.skills || []);
                 }
-            } catch (error) {
+            } catch (error) { // The catch block now correctly follows the try block
                 console.error("Failed to fetch profile:", error);
+                if (error.response && [401, 422].includes(error.response.status)) {
+                    logout();
+                }
             }
         };
         fetchProfile();
-    }, []);
+    }, [isAuthenticated, token, logout]); // Depend on token to re-fetch on login
 
+    
+    // Effect for handling clicks outside the province dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (provinceRef.current && !provinceRef.current.contains(event.target)) {
+                setProvinceDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [provinceRef]);
+
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const response = await axios.get('http://127.0.0.1:5000/api/categories');
+                setCategories(response.data);
+            } catch (error) {
+                console.error("Failed to fetch categories:", error);
+            }
+        };
+        fetchCategories();
+    }, []);
+    // <-- FIX 3: A single, robust handler for all simple form inputs (text, number, checkbox)
     const handleProfileChange = (e) => {
-        const { name, value } = e.target;
-        setProfile(prev => ({ ...prev, [name]: value }));
+        const { name, value, type, checked } = e.target;
+        setProfile(prev => ({
+            ...prev,
+            [name]: type === 'checkbox' ? checked : value
+        }));
     };
+    
+    const handleProvinceSelect = (province) => {
+        setProfile(prev => {
+            const currentProvinces = prev.preferred_provinces;
+            const newProvinces = currentProvinces.includes(province)
+                ? currentProvinces.filter(p => p !== province)
+                : [...currentProvinces, province];
+            return { ...prev, preferred_provinces: newProvinces };
+        });
+        setProvinceSearch(''); // Clear search after selection
+    };
+
+    const filteredProvinces = IRAN_PROVINCES.filter(p => p.includes(provinceSearch));
+
+    // --- (The other handlers for dynamic sections and tags remain the same and are correct) ---
 
     const handleDynamicChange = (index, e, section, setSection) => {
         const { name, value } = e.target;
@@ -51,11 +129,12 @@ const ProfilePage = () => {
         list[index][name] = value;
         setSection(list);
     };
-
-    const addDynamicItem = (setSection, newItem) => {
+    
+        const addDynamicItem = (setSection, newItem) => {
         setSection(prev => [...prev, newItem]);
     };
-
+    
+    
     const removeDynamicItem = (index, section, setSection) => {
         const list = [...section];
         list.splice(index, 1);
@@ -73,22 +152,25 @@ const ProfilePage = () => {
     const removeTag = (index, tagList, setTagList) => {
         setTagList(tagList.filter((_, i) => i !== index));
     };
-
-
     const handleSubmit = async (e) => {
         e.preventDefault();
-        const fullProfile = {
-            profile,
-            work_experiences: workExperiences,
-            educations,
-            skills
-        };
         try {
-            await axios.post(`http://127.0.0.1:5000/api/profile/${LOGGED_IN_USER_ID}`, fullProfile);
-            alert('Profile saved successfully!');
+            const fullProfilePayload = {
+                profile: { ...profile, preferred_provinces: profile.preferred_provinces.join(',') },
+                work_experiences: workExperiences,
+                educations: educations,
+                skills: skills
+            };
+            await axios.post('http://127.0.0.1:5000/api/profile', fullProfilePayload, {
+                headers: { 'Authorization': `Bearer ${token}` }
+            });
+            alert('پروفایل با موفقیت ذخیره شد!');
         } catch (error) {
             console.error('Failed to save profile:', error);
-            alert('Error saving profile.');
+            alert('خطا در ذخیره‌سازی پروفایل.');
+            if (error.response && [401, 422].includes(error.response.status)) {
+                logout();
+            }
         }
     };
 
@@ -111,6 +193,23 @@ const ProfilePage = () => {
                     {/* --- Work Experience Section --- */}
                     <div className="profile-section">
                         <h2>سابقه کاری</h2>
+                        {/* --- NEW Dropdown for Overall Experience --- */}
+                        <div className="form-group full-width" style={{ marginBottom: '25px' }}>
+                            <label>سطح تجربه کلی</label>
+                            <select
+                                name="experience_level"
+                                value={profile.experience_level}
+                                onChange={handleProfileChange}
+                                className="form-select"
+                            >
+                                {EXPERIENCE_LEVELS.map(level => (
+                                    <option key={level.value} value={level.value}>
+                                        {level.label}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
+                        
                         {workExperiences.map((exp, index) => (
                             <div key={index} className="dynamic-section-item">
                                 <button type="button" className="remove-item-btn" onClick={() => removeDynamicItem(index, workExperiences, setWorkExperiences)}>×</button>
@@ -153,55 +252,69 @@ const ProfilePage = () => {
                             </div>
                         </div>
                     </div>
-                    
-                    {/* --- Job Preferences Section (THIS IS THE NEW PART) --- */}
+
                     <div className="profile-section">
                         <h2>ترجیحات شغلی</h2>
+                        <div className="form-group full-width" style={{ marginBottom: '25px' }}>
+                            <label>حوزه تخصصی اصلی</label>
+                            <select
+                                name="preferred_category_id"
+                                value={profile.preferred_category_id}
+                                onChange={handleProfileChange}
+                                className="form-select"
+                            >
+                                <option value="">یک حوزه را انتخاب کنید...</option>
+                                {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <div className="form-grid">
                             <div className="form-group">
-                                <label>سطح ارشدیت</label>
-                                <select name="seniority_level" value={profile.seniority_level} onChange={handleProfileChange} className="form-select">
-                                    <option value="Intern">کارآموز</option>
-                                    <option value="Junior">جونیور</option>
-                                    <option value="Mid-level">میدلول</option>
-                                    <option value="Senior">سنیور</option>
-                                    <option value="Lead/Manager">مدیر/سرپرست</option>
-                                </select>
+                                <label>نوع همکاری</label>
+                                <div className="checkbox-group">
+                                    <div className="checkbox-option"><input type="checkbox" id="wants_full_time" name="wants_full_time" checked={profile.wants_full_time} onChange={handleProfileChange} /><label htmlFor="wants_full_time">تمام وقت</label></div>
+                                    <div className="checkbox-option"><input type="checkbox" id="wants_part_time" name="wants_part_time" checked={profile.wants_part_time} onChange={handleProfileChange}/><label htmlFor="wants_part_time">پاره وقت</label></div>
+                                </div>
                             </div>
                             <div className="form-group">
-                                <label>حقوق درخواستی (ماهانه به تومان)</label>
-                                <input
-                                    type="number"
-                                    name="expected_salary"
-                                    value={profile.expected_salary}
-                                    onChange={handleProfileChange}
-                                    className="form-input"
-                                    placeholder="مثال: 5000000"
-                                />
-                            </div>
-                            <div className="form-group full-width">
-                                <label>نوع قرارداد (با Enter جدا کنید)</label>
-                                <div className="tag-input-container">
-                                    {profile.employment_types.map((type, index) => (
-                                        <div key={index} className="tag-item">
-                                            <span>{type}</span>
-                                            <button type="button" onClick={() => removeTag(index, profile.employment_types, (newList) => setProfile(p => ({...p, employment_types: newList})))}>×</button>
-                                        </div>
-                                    ))}
-                                    <input type="text" onKeyDown={(e) => handleTagKeyDown(e, profile.employment_types, (newList) => setProfile(p => ({...p, employment_types: newList})))} placeholder="تمام‌وقت، دورکاری..." />
+                                <label>محل کار</label>
+                                <div className="checkbox-group">
+                                    <div className="checkbox-option"><input type="checkbox" id="wants_onsite" name="wants_onsite" checked={profile.wants_onsite} onChange={handleProfileChange}/><label htmlFor="wants_onsite">حضوری</label></div>
+                                    <div className="checkbox-option"><input type="checkbox" id="wants_remote" name="wants_remote" checked={profile.wants_remote} onChange={handleProfileChange}/><label htmlFor="wants_remote">دورکاری</label></div>
                                 </div>
                             </div>
-                            <div className="form-group full-width">
-                                <label>شهرهای مورد نظر برای کار (با Enter جدا کنید)</label>
-                                <div className="tag-input-container">
-                                    {profile.preferred_cities.map((city, index) => (
-                                        <div key={index} className="tag-item">
-                                            <span>{city}</span>
-                                            <button type="button" onClick={() => removeTag(index, profile.preferred_cities, (newList) => setProfile(p => ({...p, preferred_cities: newList})))}>×</button>
-                                        </div>
-                                    ))}
-                                    <input type="text" onKeyDown={(e) => handleTagKeyDown(e, profile.preferred_cities, (newList) => setProfile(p => ({...p, preferred_cities: newList})))} placeholder="تهران، اصفهان..." />
+                        </div>
+                        <div className="form-group checkbox-option" style={{ marginTop: '20px' }}>
+                            <input type="checkbox" id="wants_internship" name="wants_internship" checked={profile.wants_internship} onChange={handleProfileChange} />
+                            <label htmlFor="wants_internship">مایل به شرکت در دوره‌های کارآموزی هستم</label>
+                        </div>
+                        <div className="form-group full-width" ref={provinceRef}>
+                        <label>استان‌های مورد نظر برای کار</label>
+                            <div className="province-selector">
+                                <div className="province-input-area" onClick={() => setProvinceDropdownOpen(!isProvinceDropdownOpen)}>
+                                    <div className="province-tags">
+                                        {profile.preferred_provinces.map(province => (
+                                            <span key={province} className="province-tag">
+                                                {province}
+                                                <button type="button" onClick={(e) => {e.stopPropagation(); handleProvinceSelect(province);}}>×</button>
+                                            </span>
+                                        ))}
+                                    </div>
+                                    <input type="text" className="province-search-input" placeholder={profile.preferred_provinces.length === 0 ? "انتخاب استان..." : ""} value={provinceSearch} onChange={(e) => setProvinceSearch(e.target.value)} />
+                                    <span className="dropdown-arrow">▼</span>
                                 </div>
+                                {isProvinceDropdownOpen && (
+                                    <div className="province-dropdown">
+                                        {filteredProvinces.length > 0 ? filteredProvinces.map(province => (
+                                            <div key={province} className={`province-list-item ${profile.preferred_provinces.includes(province) ? 'selected' : ''}`} onClick={() => handleProvinceSelect(province)}>
+                                                {province}
+                                            </div>
+                                        )) : <div className="province-list-item">موردی یافت نشد</div>}
+                                    </div>
+                                )}
                             </div>
                         </div>
                     </div>
