@@ -12,7 +12,7 @@ import ProfessionsIllustration from './assets/professions.jpg';
 import CvIllustration from './assets/cv-illustration.jpg';
 
 import { useAuth } from './context/AuthContext';
-// import Recommendations from './components/Recommendations';
+import Recommendations from './components/Recommendations';
 
 // --- Sub-components for HomePage (No changes needed here) ---
 const HeroSection = () => (
@@ -90,7 +90,7 @@ const HomePage = () => {
         
         {/* --- DYNAMIC RECOMMENDATION SECTION --- */}
         {/* If the user is logged in, show personalized recommendations. */}
-        {/* {isAuthenticated && <Recommendations />} */}
+        {isAuthenticated && <Recommendations />}
 
         <section className="job-list-section">
           <div className="container">

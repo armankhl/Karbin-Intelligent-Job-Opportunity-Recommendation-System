@@ -85,7 +85,7 @@ def get_user_vector(user_id: int) -> np.ndarray | None:
 
 # --- 3. HARD FILTERING ---
 
-def get_filtered_job_ids(user_id: int, min_skill_overlap: int = 1) -> list[int]:
+def get_filtered_job_ids(user_id: int, min_skill_overlap: int = 0) -> list[int]:
     """
     Implements Stage 1: Candidate Generation.
     Applies all hard filters to find a small, highly-relevant pool of job candidates.

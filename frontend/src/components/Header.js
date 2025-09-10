@@ -1,16 +1,16 @@
 import React, { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { useAuth } from '../context/AuthContext'; // Import useAuth
-import LoginPromptModal from './LoginPromptModal'; // Import the modal
+import { useAuth } from '../context/AuthContext';
+import LoginPromptModal from './LoginPromptModal';
 
 const Header = () => {
     const navigate = useNavigate();
-    const { isAuthenticated, logout } = useAuth(); // Use the auth context
-    const [isModalOpen, setIsModalOpen] = useState(false); // State for modal
+    const { isAuthenticated, logout } = useAuth();
+    const [isModalOpen, setIsModalOpen] = useState(false);
 
-    const handleProfileClick = () => {
+    const handleProtectedLinkClick = (path) => {
         if (isAuthenticated) {
-            navigate('/profile');
+            navigate(path);
         } else {
             setIsModalOpen(true); // Open the modal if not logged in
         }
@@ -19,7 +19,7 @@ const Header = () => {
     const handleAuthClick = () => {
         if (isAuthenticated) {
             logout();
-            navigate('/'); // Redirect to home on logout
+            navigate('/');
         } else {
             navigate('/login');
         }
@@ -38,12 +38,19 @@ const Header = () => {
             <header className="header container">
                 <Link to="/" className="logo">کاربین</Link>
                 <nav className="nav-links">
+                    {/* Public link to all jobs */}
                     <Link to="/jobs">فرصت‌های شغلی</Link>
-                    {/* The profile link is now a button to handle the click logic */}
-                    <button onClick={handleProfileClick} className="nav-button-link">پروفایل من</button>
-                    <Link to="/for-employers">بخش کارفرمایان</Link>
+
+                    {/* Protected link to the profile page */}
+                    <button onClick={() => handleProtectedLinkClick('/profile')} className="nav-button-link">
+                        پروفایل من
+                    </button>
+                    
+                    {/* REVISED: Protected link to the recommendations page */}
+                    <button onClick={() => handleProtectedLinkClick('/recommendations')} className="nav-button-link">
+                    فرصت‌های شغلی پیشنهادی
+                    </button>
                 </nav>
-                {/* Dynamically change button text */}
                 <button className="auth-button" onClick={handleAuthClick}>
                     {isAuthenticated ? 'خروج از حساب' : 'ورود | ثبت نام'}
                 </button>
