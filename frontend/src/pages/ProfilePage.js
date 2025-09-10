@@ -26,7 +26,7 @@ const ProfilePage = () => {
         first_name: '', last_name: '', phone_number: '', professional_title: '',
         expected_salary: '', wants_full_time: false, wants_part_time: false,
         wants_remote: false, wants_onsite: false, wants_internship: false, experience_level: 0,
-        preferred_provinces: [],
+        preferred_provinces: [], preferred_category_id: '',
     });
     const [workExperiences, setWorkExperiences] = useState([]);
     const [educations, setEducations] = useState([]);
@@ -34,17 +34,9 @@ const ProfilePage = () => {
     const [provinceSearch, setProvinceSearch] = useState('');
     const [isProvinceDropdownOpen, setProvinceDropdownOpen] = useState(false);
     const provinceRef = useRef(null);
+    const [categories, setCategories] = useState([]);
 
-    // Effect for handling clicks outside the province dropdown
-    useEffect(() => {
-        const handleClickOutside = (event) => {
-            if (provinceRef.current && !provinceRef.current.contains(event.target)) {
-                setProvinceDropdownOpen(false);
-            }
-        };
-        document.addEventListener("mousedown", handleClickOutside);
-        return () => document.removeEventListener("mousedown", handleClickOutside);
-    }, [provinceRef]);
+
     useEffect(() => {
         const fetchProfile = async () => {
             // Guard clause: only fetch if authenticated and token exists.
@@ -84,7 +76,29 @@ const ProfilePage = () => {
         fetchProfile();
     }, [isAuthenticated, token, logout]); // Depend on token to re-fetch on login
 
+    
+    // Effect for handling clicks outside the province dropdown
+    useEffect(() => {
+        const handleClickOutside = (event) => {
+            if (provinceRef.current && !provinceRef.current.contains(event.target)) {
+                setProvinceDropdownOpen(false);
+            }
+        };
+        document.addEventListener("mousedown", handleClickOutside);
+        return () => document.removeEventListener("mousedown", handleClickOutside);
+    }, [provinceRef]);
 
+    useEffect(() => {
+        const fetchCategories = async () => {
+            try {
+                const response = await axios.get('http://127.0.0.1:5000/api/categories');
+                setCategories(response.data);
+            } catch (error) {
+                console.error("Failed to fetch categories:", error);
+            }
+        };
+        fetchCategories();
+    }, []);
     // <-- FIX 3: A single, robust handler for all simple form inputs (text, number, checkbox)
     const handleProfileChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -241,6 +255,22 @@ const ProfilePage = () => {
 
                     <div className="profile-section">
                         <h2>ترجیحات شغلی</h2>
+                        <div className="form-group full-width" style={{ marginBottom: '25px' }}>
+                            <label>حوزه تخصصی اصلی</label>
+                            <select
+                                name="preferred_category_id"
+                                value={profile.preferred_category_id}
+                                onChange={handleProfileChange}
+                                className="form-select"
+                            >
+                                <option value="">یک حوزه را انتخاب کنید...</option>
+                                {categories.map(cat => (
+                                    <option key={cat.id} value={cat.id}>
+                                        {cat.name}
+                                    </option>
+                                ))}
+                            </select>
+                        </div>
                         <div className="form-grid">
                             <div className="form-group">
                                 <label>نوع همکاری</label>

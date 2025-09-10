@@ -19,6 +19,7 @@ from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, JWTManager
 from services.recommendation_service import get_user_vector, get_filtered_job_ids
+from sklearn.metrics.pairwise import cosine_similarity
 
 # --- 2. CONFIGURATION & INITIALIZATIONS ---
 
@@ -52,6 +53,10 @@ try:
     print("Loading job ID map...")
     job_id_map = np.load(JOB_ID_MAP_PATH)
     print("Job ID map loaded successfully.")
+        
+    # Create a reverse map for quick lookups: DB Job ID -> FAISS Index Position
+    job_id_to_faiss_idx = {job_id: i for i, job_id in enumerate(job_id_map)}
+    print("Job ID map loaded and reverse map created.")
     
 except FileNotFoundError:
     print("CRITICAL WARNING: FAISS index or job ID map not found. Recommendation endpoint will be disabled.")
@@ -248,16 +253,17 @@ def update_profile():
                 INSERT INTO user_profiles (
                     user_id, first_name, last_name, phone_number, professional_title,
                     expected_salary, wants_full_time, wants_part_time, wants_remote,
-                    wants_onsite, wants_internship, preferred_provinces, experience_level
+                    wants_onsite, wants_internship, preferred_provinces, experience_level, preferred_category_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+                VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (user_id) DO UPDATE SET
                     first_name = EXCLUDED.first_name, last_name = EXCLUDED.last_name,
                     phone_number = EXCLUDED.phone_number, professional_title = EXCLUDED.professional_title,
                     expected_salary = EXCLUDED.expected_salary, wants_full_time = EXCLUDED.wants_full_time,
                     wants_part_time = EXCLUDED.wants_part_time, wants_remote = EXCLUDED.wants_remote,
                     wants_onsite = EXCLUDED.wants_onsite, wants_internship = EXCLUDED.wants_internship,
-                    preferred_provinces = EXCLUDED.preferred_provinces, experience_level = EXCLUDED.experience_level;
+                    preferred_provinces = EXCLUDED.preferred_provinces, experience_level = EXCLUDED.experience_level,
+                    preferred_category_id = EXCLUDED.preferred_category_id;
             """
             cur.execute(sql, (
                 current_user_id, profile.get('first_name'), profile.get('last_name'),
@@ -265,8 +271,8 @@ def update_profile():
                 profile.get('wants_full_time', False), profile.get('wants_part_time', False),
                 profile.get('wants_remote', False), profile.get('wants_onsite', False),
                 profile.get('wants_internship', False), profile.get('preferred_provinces'),
-                # Safely get the integer value, defaulting to 0
-                int(profile.get('experience_level', 0))
+                int(profile.get('experience_level', 0)),
+                profile.get('preferred_category_id') or None
             ))
 
             # Experiences
@@ -309,59 +315,130 @@ def update_profile():
     finally:
         conn.close()
 
-# === PROTECTED RECOMMENDATION ROUTE ===
-@app.route('/api/recommendations', methods=['GET'])
-@jwt_required()
-def get_recommendations():
-    """Generates and returns personalized job recommendations."""
-    if not faiss_index: return jsonify({"error": "Recommendation service is unavailable"}), 503
-    
-    current_user_id = get_jwt_identity()
-    top_k = request.args.get('top_k', default=10, type=int)
 
-    user_vector = get_user_vector(current_user_id)
-    if user_vector is None:
-        return jsonify({"message": "Please complete your profile for recommendations."}), 200
-
-    # Prepare vector for FAISS search
-    user_vector = np.array([user_vector]).astype('float32')
-    faiss.normalize_L2(user_vector)
-
-    # Stage 1: Semantic search
-    distances, faiss_indices = faiss_index.search(user_vector, 200)
-    semantic_matches = {job_id_map[idx]: float(distances[0][i]) for i, idx in enumerate(faiss_indices[0]) if idx != -1}
-
-    # Stage 2: Hard filtering
-    filtered_ids = set(get_filtered_job_ids(current_user_id))
-    final_recs = sorted(
-        [{"job_id": int(job_id), "score": score} for job_id, score in semantic_matches.items() if job_id in filtered_ids],
-        key=lambda x: x['score'], reverse=True
-    )[:top_k]
-
-    if not final_recs: return jsonify([]), 200
-
-    # Stage 3: Fetch full job details
-    rec_ids = [rec['job_id'] for rec in final_recs]
-    scores = {rec['job_id']: rec['score'] for rec in final_recs}
+@app.route('/api/categories', methods=['GET'])
+def get_categories():
+    """Fetches the list of job categories for UI dropdowns."""
     conn = get_db_connection()
     if not conn: return jsonify({"error": "Database connection failed"}), 500
     try:
         with conn.cursor() as cur:
+            cur.execute("SELECT id, name FROM categories ORDER BY name")
+            categories = [{"id": row[0], "name": row[1]} for row in cur.fetchall()]
+            return jsonify(categories)
+    except Exception as e:
+        print(f"Get categories error: {e}")
+        return jsonify({"error": "Could not retrieve categories"}), 500
+    finally:
+        conn.close()
+
+# === PROTECTED RECOMMENDATION ROUTE ===
+@app.route('/api/recommendations', methods=['GET'])
+@jwt_required()
+def get_recommendations():
+    """
+    Generates personalized job recommendations using a multi-stage,
+    filter-then-rank strategy.
+    """
+    # --- Step 0: Pre-computation Checks ---
+    if faiss_index is None:
+        return jsonify({"error": "Recommendation service is unavailable"}), 503
+    
+    current_user_id = get_jwt_identity()
+    top_k = request.args.get('top_k', default=10, type=int)
+
+    # --- Stage 1: Candidate Generation (The Sieve) ---
+    # Get a small, highly-relevant pool of jobs using hard filters.
+    candidate_ids = get_filtered_job_ids(current_user_id)
+    if not candidate_ids:
+        return jsonify([]), 200 # Return empty list if no jobs match basic criteria
+
+    # --- Stage 2: Candidate Ranking (The Magnet) ---
+    user_vector = get_user_vector(current_user_id)
+    if user_vector is None:
+        return jsonify({"message": "Please complete your profile for recommendations."}), 200
+
+    # Get the FAISS indices ONLY for our candidate jobs
+    candidate_faiss_indices = [job_id_to_faiss_idx[job_id] for job_id in candidate_ids if job_id in job_id_to_faiss_idx]
+    if not candidate_faiss_indices:
+        return jsonify([]), 200
+
+    # Reconstruct the vectors for only the candidates from the FAISS index
+    candidate_vectors = faiss_index.reconstruct_batch(np.array(candidate_faiss_indices, dtype=np.int64))
+    
+    # Prepare user vector for comparison
+    user_vector_2d = np.array([user_vector]).astype('float32')
+    
+    # Calculate cosine similarity against the small candidate pool
+    similarities = cosine_similarity(user_vector_2d, candidate_vectors)[0]
+    
+    # Combine candidate IDs with their semantic scores
+    scored_candidates = [{"job_id": candidate_ids[i], "score": float(similarities[i])} for i in range(len(candidate_faiss_indices))]
+    
+    # Sort by score and take the top N results
+    final_recs = sorted(scored_candidates, key=lambda x: x['score'], reverse=True)[:top_k]
+    
+    if not final_recs:
+        return jsonify([]), 200
+
+    # --- Stage 3: Enrich with Details and Reasoning ---
+    final_job_ids = [rec['job_id'] for rec in final_recs]
+    scores_map = {rec['job_id']: rec['score'] for rec in final_recs}
+    
+    conn = get_db_connection()
+    if not conn: return jsonify({"error": "Database connection failed"}), 500
+    
+    results = []
+    try:
+        with conn.cursor() as cur:
+            # A) Get the user's skills for comparison
+            cur.execute("SELECT s.name FROM skills s JOIN user_skills us ON s.id = us.skill_id WHERE us.user_id = %s", (current_user_id,))
+            user_skills = {row[0] for row in cur.fetchall()}
+            
+            # B) Get the skills for the recommended jobs
+            cur.execute("""
+                SELECT js.job_id, s.name FROM skills s
+                JOIN job_skill js ON s.id = js.skill_id
+                WHERE js.job_id = ANY(%s)
+            """, (final_job_ids,))
+            
+            job_skills_map = {}
+            for job_id, skill_name in cur.fetchall():
+                if job_id not in job_skills_map:
+                    job_skills_map[job_id] = set()
+                job_skills_map[job_id].add(skill_name)
+            
+            # C) Get the main job details
             cur.execute("""
                 SELECT jp.id, jp.title, c.name AS company_name, jp.city, jp.source_link
                 FROM job_postings jp JOIN companies c ON jp.company_id = c.id
                 WHERE jp.id = ANY(%s)
-            """, (rec_ids,))
+            """, (final_job_ids,))
+            
             jobs_data = {row[0]: dict(zip([desc[0] for desc in cur.description], row)) for row in cur.fetchall()}
-            # Re-order and add score
-            results = [ {**jobs_data[job_id], 'score': scores[job_id]} for job_id in rec_ids if job_id in jobs_data ]
+
+            # D) Assemble the final response
+            for job_id in final_job_ids:
+                if job_id in jobs_data:
+                    job_info = jobs_data[job_id]
+                    job_info['score'] = scores_map[job_id]
+                    
+                    # Calculate matching skills for the "reason"
+                    matching_skills = user_skills.intersection(job_skills_map.get(job_id, set()))
+                    if matching_skills:
+                        job_info['reason'] = f"Matches your skills in: {', '.join(matching_skills)}"
+                    else:
+                        job_info['reason'] = "Strong semantic match to your profile"
+                        
+                    results.append(job_info)
+
     except Exception as e:
-        print(f"Get recommendations details error: {e}"); return jsonify({"error": "Could not retrieve job details"}), 500
+        print(f"Get recommendations details error: {e}")
+        return jsonify({"error": "Could not retrieve job details"}), 500
     finally:
         conn.close()
 
     return jsonify(results)
-
 
 # --- 6. MAIN EXECUTION BLOCK ---
 if __name__ == '__main__':
