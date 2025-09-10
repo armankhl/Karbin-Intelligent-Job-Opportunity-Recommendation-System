@@ -11,7 +11,8 @@ import IranMap from './assets/iran-map.jpg';
 import ProfessionsIllustration from './assets/professions.jpg';
 import CvIllustration from './assets/cv-illustration.jpg';
 
-// We will fetch real data, so MOCK_DATA is no longer needed.
+import { useAuth } from './context/AuthContext';
+import Recommendations from './components/Recommendations';
 
 // --- Sub-components for HomePage (No changes needed here) ---
 const HeroSection = () => (
@@ -64,10 +65,11 @@ const HomePage = () => {
         // You could set some error state here to show a message to the user
       }
     };
-
+    
     fetchJobs();
   }, []); // The empty array ensures this effect runs only once
-
+  const { isAuthenticated } = useAuth(); // Use the auth hook
+  
   return (
     <>
       <Header />
@@ -85,6 +87,11 @@ const HomePage = () => {
           image={CvIllustration}
           imageSide="right"
         />
+        
+        {/* --- DYNAMIC RECOMMENDATION SECTION --- */}
+        {/* If the user is logged in, show personalized recommendations. */}
+        {isAuthenticated && <Recommendations />}
+
         <section className="job-list-section">
           <div className="container">
             <h2>آخرین فرصت‌های شغلی</h2>
@@ -103,3 +110,4 @@ const HomePage = () => {
 };
 
 export default HomePage;
+
