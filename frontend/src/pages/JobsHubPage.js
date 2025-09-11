@@ -124,12 +124,12 @@ const JobsHubPage = () => {
                             ))}
                         </div>
                         <div className="pagination-controls">
-                            <button onClick={handleNextPage} disabled={pagination.currentPage >= pagination.totalPages}>
-                                صفحه بعد
-                            </button>
-                            <span>صفحه {pagination.currentPage} از {pagination.totalPages}</span>
                             <button onClick={handlePrevPage} disabled={pagination.currentPage <= 1}>
                                 صفحه قبل
+                            </button>
+                            <span>صفحه {pagination.currentPage} از {pagination.totalPages}</span>
+                            <button onClick={handleNextPage} disabled={pagination.currentPage >= pagination.totalPages}>
+                                صفحه بعد
                             </button>
                         </div>
                     </>
