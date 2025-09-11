@@ -1,12 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import axios from 'axios'; // Use axios directly
+import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
+import { Link } from 'react-router-dom';
 
 const Recommendations = () => {
     const [recommendations, setRecommendations] = useState([]);
     const [loading, setLoading] = useState(true);
-    const [error, setError] = useState('');
-    const { isAuthenticated, token, logout } = useAuth(); // Get token and logout
+    const [error, setError] = useState(false); // Changed to boolean
+    const { isAuthenticated, logout } = useAuth();
 
     useEffect(() => {
         if (!isAuthenticated) {
@@ -15,9 +16,9 @@ const Recommendations = () => {
         }
 
         const fetchRecommendations = async () => {
-            if (!isAuthenticated || !token) {
-                setLoading(false);
-                return;
+            const token = localStorage.getItem('authToken');
+            if (!token) {
+                setLoading(false); return;
             }
 
             try {
@@ -26,7 +27,7 @@ const Recommendations = () => {
                 });
                 setRecommendations(response.data);
             } catch (err) {
-                setError('Could not fetch recommendations.');
+                setError(true); // Set error to true
                 if (err.response && [401, 422].includes(err.response.status)) {
                     logout();
                 }
@@ -37,27 +38,11 @@ const Recommendations = () => {
         };
 
         fetchRecommendations();
-    }, [isAuthenticated, token, logout]);
+    }, [isAuthenticated, logout]);
 
-    if (!isAuthenticated) {
+    // --- REVISED: Fail silently on error or while loading ---
+    if (!isAuthenticated || loading || error || recommendations.length === 0) {
         return null;
-    }
-
-    if (loading) {
-        return <div className="container"><p>در حال بارگذاری پیشنهادات شغلی برای شما...</p></div>;
-    }
-
-    if (error) {
-        return <div className="container"><p>{error}</p></div>;
-    }
-
-    if (recommendations.length === 0) {
-        return (
-            <div className="container">
-                <h2>پیشنهادات شغلی برای شما</h2>
-                <p>پیشنهاد مناسبی یافت نشد. لطفا پروفایل خود را تکمیل کنید.</p>
-            </div>
-        );
     }
 
     return (
@@ -66,15 +51,25 @@ const Recommendations = () => {
                 <h2>پیشنهادات شغلی برای شما</h2>
                 <div className="job-grid">
                     {recommendations.map(job => (
+                        // --- REVISED: Job card now matches the homepage style ---
                         <div key={job.id} className="job-card">
                             <h3>{job.title}</h3>
                             <p className="job-card-info">🏢 {job.company_name}</p>
-                            <p className="job-card-info">📍 {job.city}</p>
+                            <p className="job-card-info">📍 {job.city || 'نامشخص'}</p>
                             <p className="job-card-info" style={{fontSize: '0.8rem', color: '#007bff'}}>
-                                ✨ {job.reason} (Score: {job.score.toFixed(2)})
+                                ✨ {job.reason}
                             </p>
+                            <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
+                                مشاهده جزئیات
+                            </a>
                         </div>
                     ))}
+                </div>
+                {/* --- NEW: "See More" Button --- */}
+                <div className="view-more-container">
+                    <Link to="/recommendations" className="view-more-button">
+                        مشاهده همه پیشنهادات
+                    </Link>
                 </div>
             </div>
         </div>
