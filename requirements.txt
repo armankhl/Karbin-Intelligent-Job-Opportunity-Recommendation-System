@@ -24,3 +24,4 @@ faiss-cpu
 scikit-learn
 
 sib-api-v3-sdk
+Flask-Limiter

@@ -8,11 +8,10 @@ import UserSignup from './pages/auth/UserSignup';
 import ProfilePage from './pages/ProfilePage';
 import RecommendedJobsPage from './pages/RecommendedJobsPage';
 import JobsHubPage from './pages/JobsHubPage';
+import VerifyEmail from './pages/auth/VerifyEmail';
 
 // Placeholders for other pages
-const JobsPage = () => <div style={{textAlign: 'center', padding: '50px'}}><h2>صفحه فرصت‌های شغلی</h2></div>;
 const ForgotPassword = () => <div>Forgot Password Page</div>;
-const VerifyEmail = () => <div>Verify Email Page</div>;
 
 function App() {
   return (
@@ -28,6 +27,7 @@ function App() {
           <Route path="/profile" element={<ProfilePage />} />
           <Route path="/recommendations" element={<RecommendedJobsPage />} />
           <Route path="/jobs" element={<JobsHubPage />} />
+          <Route path="/verify-email" element={<VerifyEmail />} />
         </Routes>
       </div>
     </Router>

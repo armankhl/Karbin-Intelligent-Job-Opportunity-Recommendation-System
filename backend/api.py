@@ -21,6 +21,13 @@ from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identi
 from services.recommendation_service import get_user_vector, get_filtered_job_ids
 from sklearn.metrics.pairwise import cosine_similarity
 import joblib
+import random
+from datetime import datetime, timedelta, timezone
+import hmac
+from services.email_service import send_verification_email
+from flask_limiter import Limiter
+from flask_limiter.util import get_remote_address
+
 
 # --- 2. CONFIGURATION & INITIALIZATIONS ---
 
@@ -32,12 +39,18 @@ app = Flask(__name__)
 CORS(app)
 bcrypt = Bcrypt(app)
 
+# --- Configure Flask-Limiter ---
+# This uses a simple in-memory store, perfect for your current setup.
+limiter = Limiter(
+    get_remote_address,
+    app=app,
+    default_limits=["200 per day", "50 per hour"],
+    storage_uri="memory://",
+)
+
 # Configure JWT
 app.config["JWT_SECRET_KEY"] = os.getenv("JWT_SECRET_KEY", "a-default-fallback-secret-key")
 jwt = JWTManager(app)
-
-# Define constants
-LATEST_JOBS_LIMIT = 6
 
 # --- 3. LOAD MACHINE LEARNING ARTIFACTS AT STARTUP ---
 # This is crucial for performance, preventing file I/O on every request.
@@ -97,6 +110,7 @@ def get_db_connection():
 @app.route('/api/jobs/latest', methods=['GET'])
 def get_latest_jobs():
     """Fetches the N most recent job postings for the homepage."""
+    LATEST_JOBS_LIMIT = 9
     jobs = []
     conn = get_db_connection()
     if not conn: return jsonify({"error": "Database connection failed"}), 500
@@ -152,9 +166,117 @@ def register():
     except Exception as e: print(f"Register error: {e}"); return jsonify({"error": "Registration failed"}), 500
     finally: conn.close()
 
+#####
+
+@app.route('/api/auth/send-verification', methods=['POST'])
+@jwt_required()
+@limiter.limit("1 per minute")
+def send_verification():
+    """
+    Generates and sends a new verification code for the logged-in user.
+    """
+    current_user_id = int(get_jwt_identity())
+    
+    conn = get_db_connection()
+    if not conn: return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        with conn.cursor() as cur:
+            # 1. Fetch user's email and verification status
+            cur.execute("SELECT email, is_verified FROM users WHERE id = %s", (current_user_id,))
+            user_record = cur.fetchone()
+            if not user_record:
+                return jsonify({"error": "User not found"}), 404
+            
+            user_email, is_verified = user_record
+            if is_verified:
+                return jsonify({"message": "Email is already verified"}), 400
+
+            # 2. Generate a 6-digit code
+            code = f"{random.randint(0, 999999):06d}"
+            
+            # 3. Set expiration time (15 minutes from now)
+            expires_at = datetime.now(timezone.utc) + timedelta(minutes=15)
+            
+            # 4. Save code to the database (UPSERT logic is robust)
+            cur.execute("""
+                INSERT INTO email_verifications (user_id, code, expires_at, attempts)
+                VALUES (%s, %s, %s, 0)
+                ON CONFLICT (user_id) DO UPDATE SET
+                    code = EXCLUDED.code,
+                    expires_at = EXCLUDED.expires_at,
+                    attempts = 0;
+            """, (current_user_id, code, expires_at))
+            
+            # 5. Send the email via our service
+            email_sent = send_verification_email(user_email, code)
+            
+            if email_sent:
+                conn.commit()
+                return jsonify({"message": "Verification code sent successfully"}), 200
+            else:
+                conn.rollback()
+                return jsonify({"error": "Failed to send verification email"}), 500
+
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Send verification error: {e}")
+        return jsonify({"error": "An internal error occurred"}), 500
+    finally:
+        if conn: conn.close()
+@app.route('/api/auth/verify-code', methods=['POST'])
+@jwt_required()
+def verify_code():
+    """
+    Verifies the submitted code for the logged-in user.
+    """
+    current_user_id = int(get_jwt_identity())
+    submitted_code = request.json.get('code')
+    
+    if not submitted_code:
+        return jsonify({"error": "Verification code is required"}), 400
+
+    conn = get_db_connection()
+    if not conn: return jsonify({"error": "Database connection failed"}), 500
+    
+    try:
+        with conn.cursor() as cur:
+            cur.execute("SELECT code, expires_at, attempts FROM email_verifications WHERE user_id = %s", (current_user_id,))
+            verification_record = cur.fetchone()
+            
+            if not verification_record:
+                return jsonify({"error": "No verification process started. Please request a new code."}), 404
+            
+            stored_code, expires_at, attempts = verification_record
+            
+            if attempts >= 5:
+                return jsonify({"error": "Too many attempts. Please request a new code."}), 429
+
+            if datetime.now(timezone.utc) > expires_at:
+                return jsonify({"error": "Verification code has expired. Please request a new one."}), 410
+
+            # --- THE FIX IS HERE ---
+            # Use hmac.compare_digest and encode both strings to bytes
+            if not hmac.compare_digest(stored_code.encode('utf-8'), submitted_code.encode('utf-8')):
+                cur.execute("UPDATE email_verifications SET attempts = attempts + 1 WHERE user_id = %s", (current_user_id,))
+                conn.commit()
+                return jsonify({"error": "Invalid verification code"}), 400
+
+            # --- Success Case ---
+            cur.execute("UPDATE users SET is_verified = TRUE WHERE id = %s", (current_user_id,))
+            cur.execute("DELETE FROM email_verifications WHERE user_id = %s", (current_user_id,))
+            conn.commit()
+            return jsonify({"message": "Email verified successfully"}), 200
+
+    except Exception as e:
+        if conn: conn.rollback()
+        print(f"Verify code error: {e}")
+        return jsonify({"error": "An internal error occurred"}), 500
+    finally:
+        if conn: conn.close()
+
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    # Gracefully handle cases where request body might not be JSON
     if not request.is_json:
         return jsonify({"error": "Missing JSON in request"}), 400
         
@@ -170,19 +292,36 @@ def login():
     
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT id, password_hash FROM users WHERE email = %s", (email,))
+            # --- THE FIX (Step 1): Fetch the is_verified status ---
+            cur.execute("SELECT id, password_hash, is_verified FROM users WHERE email = %s", (email,))
             user_record = cur.fetchone()
+            
             if user_record and bcrypt.check_password_hash(user_record[1], password):
-                access_token = create_access_token(identity=str(user_record[0]))
-                return jsonify(access_token=access_token)
+                user_id = user_record[0]
+                is_verified = user_record[2]
+                
+                access_token = create_access_token(identity=str(user_id))
+                
+                # --- THE FIX (Step 2): Return a different status based on verification ---
+                if is_verified:
+                    # User is fully authenticated and verified
+                    return jsonify({
+                        "access_token": access_token,
+                        "status": "verified"
+                    })
+                else:
+                    # User is authenticated but NOT verified
+                    return jsonify({
+                        "access_token": access_token,
+                        "status": "unverified"
+                    })
             else:
                 return jsonify({"error": "Invalid credentials"}), 401
     except Exception as e:
         print(f"Login error: {e}")
         return jsonify({"error": "An internal error occurred"}), 500
     finally:
-        if conn:
-            conn.close()
+        if conn: conn.close()
 
 @app.route('/api/profile', methods=['GET'])
 @jwt_required()
