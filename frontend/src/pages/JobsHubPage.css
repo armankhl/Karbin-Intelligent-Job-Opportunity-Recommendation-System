@@ -1,0 +1,127 @@
+.jobs-hub-container {
+    max-width: 1100px;
+    margin: 40px auto;
+    padding: 20px;
+    min-height: 60vh;
+}
+
+.page-title {
+    text-align: center;
+    font-size: 2.8rem;
+    margin-bottom: 50px;
+    color: #000;
+}
+
+.filter-bar {
+    display: grid;
+    grid-template-columns: 2fr 1fr 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 40px;
+    padding: 20px;
+    background-color: #f9f9f9;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+}
+
+/* --- FIX: Added font-family --- */
+.filter-bar input, 
+.filter-bar select {
+    padding: 12px;
+    border: 1px solid #ddd;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-family: 'Vazirmatn', sans-serif;
+}
+
+.sort-select {
+    background-color: #e7f3ff;
+    font-weight: 500;
+}
+
+.status-message {
+    text-align: center;
+    font-size: 1.2rem;
+    color: #555;
+    padding: 50px 0;
+}
+
+/* --- REVISED: Styles now match the homepage --- */
+.job-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 25px;
+}
+
+.job-card {
+  background-color: #fff;
+  border: 1px solid #e0e0e0;
+  padding: 25px;
+  border-radius: 12px;
+  text-align: right;
+  transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.job-card:hover {
+    transform: translateY(-5px);
+    box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
+}
+
+.job-card h3 {
+  font-size: 1.3rem;
+  margin-top: 0;
+  margin-bottom: 15px;
+  color: #000;
+  min-height: 56px; /* Helps align cards with different title lengths */
+}
+
+.job-card-info {
+  margin-bottom: 10px;
+  color: #555;
+}
+
+.job-details-link {
+    display: inline-block;
+    margin-top: 15px;
+    background-color: #000;
+    color: #fff;
+    padding: 10px 20px;
+    border-radius: 8px;
+    text-decoration: none;
+    font-weight: 500;
+    transition: background-color 0.3s;
+    width: 100%;
+    text-align: center;
+    box-sizing: border-box;
+}
+
+.job-details-link:hover {
+    background-color: #333;
+}
+/* --- End of Revised Styles --- */
+
+.pagination-controls {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-top: 40px;
+    gap: 20px;
+}
+
+.pagination-controls button {
+    padding: 10px 20px;
+    border: 1px solid #ccc;
+    background-color: #fff;
+    border-radius: 8px;
+    cursor: pointer;
+    font-family: 'Vazirmatn', sans-serif;
+    font-size: 1rem;
+}
+
+.pagination-controls button:disabled {
+    cursor: not-allowed;
+    opacity: 0.5;
+}
+
+.pagination-controls span {
+    font-weight: 500;
+}
