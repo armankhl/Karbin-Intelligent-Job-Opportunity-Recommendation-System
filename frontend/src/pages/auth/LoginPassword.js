@@ -10,22 +10,43 @@ const LoginPassword = () => {
   const [password, setPassword] = useState('');
   const navigate = useNavigate();
   const { login } = useAuth();
-
   const handleSubmit = async (e) => {
     e.preventDefault();
     try {
-      // FIX: Use the 'api' client and a relative path
+      // Step 1: Attempt to log in
       const response = await axios.post('http://127.0.0.1:5000/api/auth/login', { email, password });
-      if (response.data.access_token) {
-          login(response.data.access_token);
+      
+      const token = response.data.access_token;
+      const status = response.data.status;
+
+      if (token) {
+        // Step 2: Log the user in globally, regardless of verification status
+        login(token);
+
+        // Step 3: Check the verification status and redirect accordingly
+        if (status === 'unverified') {
+          // User needs to verify. Trigger a new code and redirect.
+          try {
+            await axios.post('http://127.0.0.1:5000/api/auth/send-verification', {}, {
+              headers: { 'Authorization': `Bearer ${token}` }
+            });
+            // Redirect to the verification page
+            navigate('/verify-email', { state: { email } });
+          } catch (resendError) {
+            console.error("Failed to auto-resend verification code:", resendError);
+            // Even if resend fails, still send them to the page to try manually
+            navigate('/verify-email', { state: { email } });
+          }
+        } else {
+          // User is verified, proceed to the homepage
           navigate('/');
+        }
       }
     } catch (error) {
       console.error('Login failed:', error);
       alert('Login failed: Invalid credentials.');
     }
   };
-
   // ... (The JSX part of the component is unchanged and correct) ...
   return (
     <div className="auth-container">
