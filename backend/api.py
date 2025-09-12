@@ -18,7 +18,7 @@ from flask import Flask, jsonify, request
 from flask_cors import CORS
 from flask_bcrypt import Bcrypt
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity, JWTManager
-from services.recommendation_service import get_user_vector, get_filtered_job_ids
+# from services.recommendation_service import get_user_vector, get_filtered_job_ids
 from sklearn.metrics.pairwise import cosine_similarity
 import joblib
 import random
@@ -27,6 +27,8 @@ import hmac
 from services.email_service import send_verification_email
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from services.recommendation_service import get_recommendations_for_user
+
 
 
 # --- 2. CONFIGURATION & INITIALIZATIONS ---
@@ -485,113 +487,22 @@ def get_categories():
     finally:
         conn.close()
 
-# === PROTECTED RECOMMENDATION ROUTE ===
+
 @app.route('/api/recommendations', methods=['GET'])
 @jwt_required()
 def get_recommendations():
     """
-    Generates personalized job recommendations using a multi-stage,
-    filter-then-rank strategy.
+    A thin wrapper that calls the reusable recommendation service.
     """
-    # --- Step 0: Pre-computation Checks ---
     if faiss_index is None:
         return jsonify({"error": "Recommendation service is unavailable"}), 503
     
-    current_user_id = get_jwt_identity()
+    current_user_id = int(get_jwt_identity())
     top_k = request.args.get('top_k', default=10, type=int)
-
-    # --- Stage 1: Candidate Generation (The Sieve) ---
-    # Get a small, highly-relevant pool of jobs using hard filters.
-    candidate_ids = get_filtered_job_ids(current_user_id)
-    if not candidate_ids:
-        return jsonify([]), 200 # Return empty list if no jobs match basic criteria
-
-    # --- Stage 2: Candidate Ranking (The Magnet) ---
-    user_vector = get_user_vector(current_user_id)
-    if user_vector is None:
-        return jsonify({"message": "Please complete your profile for recommendations."}), 200
-
-    # Get the FAISS indices ONLY for our candidate jobs
-    candidate_faiss_indices = [job_id_to_faiss_idx[job_id] for job_id in candidate_ids if job_id in job_id_to_faiss_idx]
-    if not candidate_faiss_indices:
-        return jsonify([]), 200
-
-    # Reconstruct the vectors for only the candidates from the FAISS index
-    candidate_vectors = faiss_index.reconstruct_batch(np.array(candidate_faiss_indices, dtype=np.int64))
     
-    # Prepare user vector for comparison
-    user_vector_2d = np.array([user_vector]).astype('float32')
+    recommendations = get_recommendations_for_user(current_user_id, top_k=top_k)
     
-    # Calculate cosine similarity against the small candidate pool
-    similarities = cosine_similarity(user_vector_2d, candidate_vectors)[0]
-    
-    # Combine candidate IDs with their semantic scores
-    scored_candidates = [{"job_id": candidate_ids[i], "score": float(similarities[i])} for i in range(len(candidate_faiss_indices))]
-    
-    # Sort by score and take the top N results
-    final_recs = sorted(scored_candidates, key=lambda x: x['score'], reverse=True)[:top_k]
-    
-    if not final_recs:
-        return jsonify([]), 200
-
-    # --- Stage 3: Enrich with Details and Reasoning ---
-    final_job_ids = [rec['job_id'] for rec in final_recs]
-    scores_map = {rec['job_id']: rec['score'] for rec in final_recs}
-    
-    conn = get_db_connection()
-    if not conn: return jsonify({"error": "Database connection failed"}), 500
-    
-    results = []
-    try:
-        with conn.cursor() as cur:
-            # A) Get the user's skills for comparison
-            cur.execute("SELECT s.name FROM skills s JOIN user_skills us ON s.id = us.skill_id WHERE us.user_id = %s", (current_user_id,))
-            user_skills = {row[0] for row in cur.fetchall()}
-            
-            # B) Get the skills for the recommended jobs
-            cur.execute("""
-                SELECT js.job_id, s.name FROM skills s
-                JOIN job_skill js ON s.id = js.skill_id
-                WHERE js.job_id = ANY(%s)
-            """, (final_job_ids,))
-            
-            job_skills_map = {}
-            for job_id, skill_name in cur.fetchall():
-                if job_id not in job_skills_map:
-                    job_skills_map[job_id] = set()
-                job_skills_map[job_id].add(skill_name)
-            
-            # C) Get the main job details
-            cur.execute("""
-                SELECT jp.id, jp.title, c.name AS company_name, jp.city, jp.source_link
-                FROM job_postings jp JOIN companies c ON jp.company_id = c.id
-                WHERE jp.id = ANY(%s)
-            """, (final_job_ids,))
-            
-            jobs_data = {row[0]: dict(zip([desc[0] for desc in cur.description], row)) for row in cur.fetchall()}
-
-            # D) Assemble the final response
-            for job_id in final_job_ids:
-                if job_id in jobs_data:
-                    job_info = jobs_data[job_id]
-                    job_info['score'] = scores_map[job_id]
-                    
-                    # Calculate matching skills for the "reason"
-                    matching_skills = user_skills.intersection(job_skills_map.get(job_id, set()))
-                    if matching_skills:
-                        job_info['reason'] = f"Matches your skills in: {', '.join(matching_skills)}"
-                    else:
-                        job_info['reason'] = "Strong semantic match to your profile"
-                        
-                    results.append(job_info)
-
-    except Exception as e:
-        print(f"Get recommendations details error: {e}")
-        return jsonify({"error": "Could not retrieve job details"}), 500
-    finally:
-        conn.close()
-
-    return jsonify(results)
+    return jsonify(recommendations)
 
 @app.route('/api/jobs', methods=['GET'])
 @jwt_required(optional=True)
