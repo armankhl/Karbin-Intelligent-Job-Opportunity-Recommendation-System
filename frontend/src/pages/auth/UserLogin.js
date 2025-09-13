@@ -40,7 +40,6 @@ const UserLogin = () => {
           autoComplete="email"
         />
         <button type="submit" className="auth-button-primary">ورود</button>
-        <a href="/employer-login" className="auth-link">کارفرما هستید؟ ورود به بخش کارفرمایی</a>
       </form>
     </div>
   );

@@ -22,7 +22,7 @@ const RecommendedJobsPage = () => {
             try {
                 const token = localStorage.getItem('authToken');
                 // Fetch a larger number of jobs (e.g., 12) for a full page view
-                const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=12', {
+                const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=100', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 setRecommendations(response.data);
