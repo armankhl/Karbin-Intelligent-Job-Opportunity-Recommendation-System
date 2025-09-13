@@ -1,4 +1,4 @@
-///////////////////////////////
+
 import React, { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import axios from 'axios';
@@ -8,11 +8,11 @@ import IranMap from './assets/iran-map.jpg';
 import ProfessionsIllustration from './assets/professions.jpg';
 import CvIllustration from './assets/cv-illustration.jpg';
 import { useAuth } from './context/AuthContext';
-import Recommendations from './components/Recommendations';
-import LoginPromptModal from './components/LoginPromptModal'; // Import the modal
+import LoginPromptModal from './components/LoginPromptModal';
+import JobCard from './components/JobCard'; // Import the new reusable component
+import RelevantJobs from './components/RelevantJobs'; // Import our new component
 
-
-// --- Sub-components for HomePage (No changes needed here) ---
+// --- Sub-components for HomePage ---
 const HeroSection = () => (
   <section className="hero container">
     <h1>شغل رویایی خود را پیدا کنید</h1>
@@ -22,28 +22,13 @@ const HeroSection = () => (
 );
 
 const FeatureSection = ({ title, text, image, imageSide, onClick }) => (
-    // --- REVISED: Added onClick and a conditional class for cursor ---
     <section className={`feature-section container ${onClick ? 'clickable' : ''}`} style={{ flexDirection: imageSide === 'left' ? 'row-reverse' : 'row' }} onClick={onClick}>
         <div className="feature-text"><h2>{title}</h2><p>{text}</p></div>
         <div className="feature-image"><img src={image} alt={title} /></div>
     </section>
 );
-  
 
-const JobCard = ({ job }) => (
-  <div className="job-card">
-    {/* Use the correct field names from your API response */}
-    <h3>{job.title}</h3>
-    <p className="job-card-info">🏢 {job.company_name}</p> 
-    <p className="job-card-info">📍 {job.city}</p>
-    {/* The link now uses the REAL source_link from the database */}
-    <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
-      مشاهده جزئیات
-    </a>
-  </div>
-);
-
-
+// --- Main HomePage Component ---
 const HomePage = () => {
     const [jobs, setJobs] = useState([]);
     const { isAuthenticated } = useAuth();
@@ -62,7 +47,6 @@ const HomePage = () => {
         fetchJobs();
     }, []);
 
-    // --- NEW: Handler for the protected profile feature section ---
     const handleProfileFeatureClick = () => {
         if (isAuthenticated) {
             navigate('/profile');
@@ -73,12 +57,10 @@ const HomePage = () => {
 
     return (
         <>
-            {/* NEW: Added modal for the protected link */}
             <LoginPromptModal isOpen={isModalOpen} onClose={() => setIsModalOpen(false)} onConfirm={() => { setIsModalOpen(false); navigate('/login'); }} />
             <Header />
             <main>
                 <HeroSection />
-                {/* --- REVISED: Feature sections are now clickable --- */}
                 <FeatureSection
                     title="فرصت‌های شغلی"
                     text="به جدیدترین فرصت‌های شغلی که در تمامی سایت‌های کاریابی در سراسر ایران منتشر شده اند بصورت یکپارچه دسترسی پیدا کنید."
@@ -94,8 +76,6 @@ const HomePage = () => {
                     onClick={handleProfileFeatureClick}
                 />
                 
-                {/* --- REVISED: Section order is swapped --- */}
-
                 {/* Latest Jobs Section */}
                 <section className="job-list-section">
                     <div className="container">
@@ -103,7 +83,6 @@ const HomePage = () => {
                         <div className="job-grid">
                             {jobs.map(job => <JobCard key={job.id} job={job} />)}
                         </div>
-                        {/* --- NEW: "See More" Button --- */}
                         <div className="view-more-container">
                             <Link to="/jobs" className="view-more-button">
                                 مشاهده همه فرصت‌ها
@@ -112,8 +91,8 @@ const HomePage = () => {
                     </div>
                 </section>
 
-                {/* Recommendations Section */}
-                {isAuthenticated && <Recommendations />}
+                {/* --- REVISED: Recommendations replaced with RelevantJobs --- */}
+                {isAuthenticated && <RelevantJobs />}
 
             </main>
             <Footer />
