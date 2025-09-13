@@ -2,14 +2,14 @@ import React, { useState } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import axios from 'axios';
 import '../../AuthForm.css';
-import { useAuth } from '../../context/AuthContext'; // Import useAuth
+import { useAuth } from '../../context/AuthContext';
 
 const UserSignup = () => {
     const location = useLocation();
     const navigate = useNavigate();
-    const { login } = useAuth(); // Get the login function
+    const { login } = useAuth();
+
     const initialEmail = location.state?.email || '';
-    const [name, setName] = useState('');
     const [email, setEmail] = useState(initialEmail);
     const [password, setPassword] = useState('');
     const [confirmPassword, setConfirmPassword] = useState('');
@@ -22,7 +22,7 @@ const UserSignup = () => {
         }
         try {
             // Step 1: Register the user
-            const registerResponse = await axios.post('http://127.0.0.1:5000/api/auth/register', { name, email, password });
+            const registerResponse = await axios.post('http://127.0.0.1:5000/api/auth/register', {email, password });
             
             if (registerResponse.data.access_token) {
                 // Step 2: Log the user in to get a token for the next request
@@ -50,7 +50,6 @@ const UserSignup = () => {
         <h1>ثبت‌نام کارجو</h1>
         <p>به کاربین خوش آمدید</p>
           <input  type="email" name="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="auth-input" placeholder="ایمیل" required />
-          <input type="text" name="name" autoComplete="name" value={name} onChange={(e) => setName(e.target.value)} className="auth-input" placeholder="نام و نام خانوادگی" required />
           <input type="password" name="new-password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} className="auth-input" placeholder="رمز ورود" required />
           <input type="password" value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} className="auth-input" placeholder="تکرار رمز عبور" required />
         <button type="submit" className="auth-button-primary">ثبت نام</button>
