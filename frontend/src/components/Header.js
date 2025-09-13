@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react'; // 1. Import useCallback
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import LoginPromptModal from './LoginPromptModal';
@@ -8,12 +8,13 @@ const Header = () => {
     const navigate = useNavigate();
     const { isAuthenticated, user, logout } = useAuth();
     
-    // --- State and handlers for protected links and smart header ---
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [lastScrollY, setLastScrollY] = useState(0);
     const [isHeaderVisible, setHeaderVisible] = useState(true);
 
-    const controlHeader = () => {
+    // --- FIX: The controlHeader function is now wrapped in useCallback ---
+    // This function will only be recreated if `lastScrollY` changes.
+    const controlHeader = useCallback(() => {
         if (typeof window !== 'undefined') {
             if (window.scrollY > lastScrollY && window.scrollY > 100) {
                 setHeaderVisible(false);
@@ -22,14 +23,16 @@ const Header = () => {
             }
             setLastScrollY(window.scrollY);
         }
-    };
+    }, [lastScrollY]); // The dependency for useCallback
 
     useEffect(() => {
-        window.addEventListener('scroll', controlHeader);
-        return () => window.removeEventListener('scroll', controlHeader);
-    }, [lastScrollY]);
+        if (typeof window !== 'undefined') {
+            window.addEventListener('scroll', controlHeader);
+            return () => window.removeEventListener('scroll', controlHeader);
+        }
+    // --- FIX: We now safely include `controlHeader` in the dependency array ---
+    }, [controlHeader]);
 
-    // This function is now used by multiple buttons
     const handleProtectedLinkClick = (path) => {
         if (isAuthenticated) {
             navigate(path);
