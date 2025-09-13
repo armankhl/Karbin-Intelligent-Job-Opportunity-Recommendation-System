@@ -104,7 +104,7 @@ const JobsHubPage = () => {
                     <select name="sortBy" value={sortBy} onChange={handleSortChange} className="sort-select">
                         <option value="newest">جدیدترین</option>
                         <option value="pay">بیشترین حقوق</option>
-                        {isAuthenticated && <option value="relevance">مرتبط‌ترین</option>}
+                        {isAuthenticated && <option value="relevance">مرتبط‌ ترین</option>}
                     </select>
                 </div>
 

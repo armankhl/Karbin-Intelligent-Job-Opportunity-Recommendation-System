@@ -81,7 +81,7 @@ const RecommendedJobsPage = () => {
         <>
             <Header />
             <div className="page-container">
-                <h1 className="page-title">شغل‌های پیشنهادی برای شما</h1>
+                <h1 className="page-title">فرصت‌های شغلی پیشنهادی برای شما</h1>
                 {renderContent()}
             </div>
             <Footer />
