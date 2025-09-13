@@ -32,8 +32,8 @@ const ProfileDropdown = ({ user, onLogout }) => {
         <div className="profile-dropdown" ref={dropdownRef}>
             <button onClick={() => setIsOpen(!isOpen)} className="profile-trigger">
                 {/* Use the imported SVG as an image */}
-                <img src={DefaultAvatar} alt="Profile" className="profile-trigger-avatar" />
                 <span className={`dropdown-arrow-icon ${isOpen ? 'open' : ''}`}>▼</span>
+                <img src={DefaultAvatar} alt="Profile" className="profile-trigger-avatar" />
             </button>
             
 
