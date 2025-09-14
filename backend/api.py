@@ -106,7 +106,6 @@ def get_db_connection():
         print(f"Database connection error: {e}")
         return None
 
-# --- 5. API ROUTES ---
 
 # === PUBLIC ROUTES ===
 @app.route('/api/jobs/latest', methods=['GET'])
@@ -151,24 +150,35 @@ def check_email():
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    data, conn = request.json, get_db_connection()
+    data = request.json
+    email = data.get('email')
+    password = data.get('password')
+
+    if not email or not password:
+        return jsonify({"error": "Email and password are required"}), 400
+
+    conn = get_db_connection()
     if not conn: return jsonify({"error": "Database connection failed"}), 500
+    
     try:
         with conn.cursor() as cur:
-            password_hash = bcrypt.generate_password_hash(data['password']).decode('utf-8')
+            password_hash = bcrypt.generate_password_hash(password).decode('utf-8')
             cur.execute(
-                "INSERT INTO users (name, email, password_hash) VALUES (%s, %s, %s) RETURNING id",
-                (data['name'], data['email'], password_hash)
+                "INSERT INTO users (email, password_hash) VALUES (%s, %s) RETURNING id",
+                (email, password_hash)
             )
             user_id = cur.fetchone()[0]
             conn.commit()
             access_token = create_access_token(identity=str(user_id))
             return jsonify(access_token=access_token), 201
-    except psycopg2.IntegrityError: return jsonify({"error": "Email already exists"}), 409
-    except Exception as e: print(f"Register error: {e}"); return jsonify({"error": "Registration failed"}), 500
-    finally: conn.close()
-
-#####
+            
+    except psycopg2.IntegrityError:
+        return jsonify({"error": "Email already exists"}), 409
+    except Exception as e:
+        print(f"Register error: {e}")
+        return jsonify({"error": "Registration failed"}), 500
+    finally:
+        if conn: conn.close()
 
 @app.route('/api/auth/send-verification', methods=['POST'])
 @jwt_required()

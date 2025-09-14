@@ -1,0 +1,109 @@
+.profile-dropdown {
+    position: relative;
+    display: inline-block;
+}
+
+/* --- REVISED: The trigger is now a flex container with a pill shape --- */
+.profile-trigger {
+    background: none;
+    border: 1px solid #e0e0e0;
+    border-radius: 50px; /* Pill shape */
+    padding: 4px; /* A little space around the content */
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 8px; /* Space between avatar and arrow */
+    transition: background-color 0.2s ease;
+}
+
+.profile-trigger:hover {
+    background-color: #f9f9f9;
+}
+
+/* --- REVISED: Slightly smaller avatar to fit nicely inside the pill --- */
+.profile-trigger-avatar {
+    width: 34px;
+    height: 34px;
+}
+
+/* --- NEW: Styles for the arrow icon --- */
+.dropdown-arrow-icon {
+    font-size: 0.7rem;
+    color: #555;
+    margin-left: 4px; /* A bit of space on the end (in RTL) */
+    transition: transform 0.2s ease-in-out;
+}
+
+/* --- NEW: Animation for when the dropdown is open --- */
+.dropdown-arrow-icon.open {
+    transform: rotate(180deg);
+}
+
+
+.dropdown-menu {
+    position: absolute;
+    left: 0;
+    top: 55px;
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 5px 25px rgba(0,0,0,0.1);
+    width: 280px;
+    z-index: 1001;
+    border: 1px solid #eee;
+    overflow: hidden;
+}
+
+.dropdown-header {
+    display: flex;
+    align-items: center;
+    padding: 20px;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.dropdown-avatar {
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    margin-left: 15px;
+    border: 0.5px solid #333;
+
+}
+
+.dropdown-info {
+    display: flex;
+    flex-direction: column;
+    text-align: right;
+}
+
+.user-name {
+    font-weight: 700;
+    font-size: 1.1rem;
+    color: #333;
+}
+
+.user-title {
+    font-size: 0.9rem;
+    color: #777;
+}
+
+.dropdown-list {
+    list-style: none;
+    padding: 10px 0;
+    margin: 0;
+}
+
+.dropdown-item {
+    padding: 12px 20px;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+    text-align: right;
+}
+
+.dropdown-item:hover {
+    background-color: #f9f9f9;
+}
+
+.dropdown-item.logout {
+    color: #d9534f;
+    border-top: 1px solid #f0f0f0;
+}
