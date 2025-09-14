@@ -4,6 +4,7 @@ import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import './JobsHubPage.css';
+import JobListItem from '../components/JobListItem';
 
 const JobsHubPage = () => {
     const { isAuthenticated } = useAuth();
@@ -110,17 +111,9 @@ const JobsHubPage = () => {
 
                 {loading ? <p className="status-message">در حال بارگذاری...</p> : (
                     <>
-                        <div className="job-grid">
+                        <div className="job-list">
                             {jobs.map(job => (
-                                // --- REVISED JSX FOR JOB CARD ---
-                                <div key={job.id} className="job-card">
-                                    <h3>{job.title}</h3>
-                                    <p className="job-card-info">🏢 {job.company_name}</p>
-                                    <p className="job-card-info">📍 {job.province || 'نامشخص'}</p>
-                                    <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
-                                        مشاهده جزئیات
-                                    </a>
-                                </div>
+                                <JobListItem key={job.id} job={job} />
                             ))}
                         </div>
                         <div className="pagination-controls">

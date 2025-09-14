@@ -45,123 +45,100 @@
     padding: 50px 0;
 }
 
-/* Job List Section */
-.job-list-section {
-    padding: 60px 0;
-    background-color: #f9f9f9;
-  }
-  
-  .job-list-section h2 {
-      text-align: center;
-      font-size: 2.8rem;
-      margin-bottom: 50px;
-      color: #000;
-  }
-  
-  .job-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
-    gap: 25px;
-    /* NEW: This ensures all items in a grid row stretch to the same height */
-    align-items: stretch;
-  }
-  
-  /* --- THE CORE FIX FOR CONSISTENT CARD HEIGHT --- */
-  .job-card {
-    background-color: #fff;
-    border: 1px solid #e0e0e0;
-    padding: 25px;
-    border-radius: 12px;
-    text-align: right;
-    transition: transform 0.3s ease, box-shadow 0.3s ease;
-    
-    /* 1. Make the card a flex container that arranges content vertically */
+/* --- NEW: Styles for the List View --- */
+.job-list {
     display: flex;
     flex-direction: column;
-  }
-  
-  .job-card:hover {
-      transform: translateY(-5px);
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.08);
-  }
-  
-  .job-card h3 {
-    font-size: 1.3rem;
-    margin-top: 0;
-    margin-bottom: 15px;
-    color: #000;
-    
-    /* 2. Reserve a consistent height for the title (allows for ~2 lines) */
-    min-height: 56px;
-  
-    /* 3. Gracefully truncate very long titles with an ellipsis (...) */
-    display: -webkit-box;
-    -webkit-line-clamp: 2; /* Show a maximum of 2 lines */
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  
-  .job-card-info {
-    margin-bottom: 10px;
-    color: #555;
-    
-    /* Reserve space for company name, allowing for 2 lines */
-    min-height: 42px;
-    
-    /* Truncate long company names as well */
-    display: -webkit-box;
-    -webkit-line-clamp: 2;
-    -webkit-box-orient: vertical;
-    overflow: hidden;
-    text-overflow: ellipsis;
-  }
-  
-  .job-details-link {
-      display: block; /* Use block to fill width */
-      width: 100%;
-      text-align: center;
-      box-sizing: border-box;
-  
-      /* 4. This magic line pushes the button to the bottom of the card */
-      margin-top: auto; 
-  
-      background-color: #000;
-      color: #fff;
-      padding: 10px 20px;
-      border-radius: 8px;
-      text-decoration: none;
-      font-weight: 500;
-      transition: background-color 0.3s;
-  }
-  
-  .job-details-link:hover {
-      background-color: #333;
-  }
+    gap: 15px; /* Space between list items */
+}
 
-.pagination-controls {
+.job-list-item {
     display: flex;
-    justify-content: center;
     align-items: center;
-    margin-top: 40px;
-    gap: 20px;
-}
-
-.pagination-controls button {
-    padding: 10px 20px;
-    border: 1px solid #ccc;
     background-color: #fff;
+    border: 1px solid #e0e0e0;
+    border-radius: 12px;
+    padding: 20px;
+    transition: box-shadow 0.3s ease;
+}
+
+.job-list-item:hover {
+    box-shadow: 0 4px 15px rgba(0, 0, 0, 0.08);
+}
+
+.job-item-logo {
+    flex-shrink: 0;
+    margin-left: 20px; /* In RTL, this pushes content right */
+}
+
+.logo-placeholder {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    width: 60px;
+    height: 60px;
     border-radius: 8px;
-    cursor: pointer;
-    font-family: 'Vazirmatn', sans-serif;
+    background-color: #f1f3f5;
+    color: #495057;
+    font-size: 1.5rem;
+    font-weight: bold;
+}
+
+.job-item-details {
+    flex-grow: 1;
+    text-align: right;
+}
+
+.details-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 15px;
+}
+
+.job-title {
+    font-size: 1.4rem;
+    color: #0056b3;
+    margin: 0;
+}
+
+.posted-date {
+    font-size: 0.9rem;
+    color: #888;
+}
+
+/* ... (keep all other styles) ... */
+
+/* --- REVISED: The details-body now stacks items vertically --- */
+.details-body {
+    display: flex;
+    flex-direction: column; /* This is the key change */
+    gap: 10px; /* Adjust the vertical space between lines */
+    color: #555;
+}
+
+/* --- REVISED: Ensure <p> tags have no extra margin --- */
+.info-item {
     font-size: 1rem;
+    margin: 0; /* Remove default paragraph margin */
 }
 
-.pagination-controls button:disabled {
-    cursor: not-allowed;
-    opacity: 0.5;
+.job-item-action {
+    flex-shrink: 0;
+    margin-right: 20px; /* In RTL, this is the space on the left */
 }
 
-.pagination-controls span {
+.details-button {
+    background-color: #000;
+    color: #fff;
+    padding: 12px 25px;
+    border-radius: 8px;
+    text-decoration: none;
     font-weight: 500;
+    transition: background-color 0.3s;
+    white-space: nowrap; /* Prevents button text from wrapping */
+}
+
+.details-button:hover {
+    background-color: #333;
 }
