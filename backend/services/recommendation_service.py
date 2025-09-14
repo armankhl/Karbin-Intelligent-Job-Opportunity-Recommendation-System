@@ -6,6 +6,7 @@ from dotenv import load_dotenv
 from services.embedding_service import embed_texts
 import faiss
 from sklearn.metrics.pairwise import cosine_similarity
+from sentence_transformers import CrossEncoder 
 
 # --- 1. CONFIGURATION & ARTIFACT LOADING ---
 load_dotenv()
@@ -23,6 +24,15 @@ try:
     print("Recommendation service: FAISS index and maps loaded successfully.")
 except Exception as e:
     print(f"CRITICAL WARNING (recommendation_service): Could not load artifacts: {e}")
+
+cross_encoder_model = None
+try:
+    print("Loading Cross-Encoder model for re-ranking...")
+    # This is a powerful, multilingual model trained for semantic relevance.
+    cross_encoder_model = CrossEncoder('cross-encoder/ms-marco-MiniLM-L-6-v2')
+    print("Cross-Encoder model loaded successfully.")
+except Exception as e:
+    print(f"CRITICAL WARNING: Could not load Cross-Encoder model: {e}")
 
 
 def get_db_connection():
@@ -260,36 +270,93 @@ def _calculate_scores_for_candidates(user_id: int, candidates: list[dict]) -> li
         if conn: conn.close()
 
 
+def _build_job_texts_for_reranking(job_ids: list[int]) -> dict:
+    """
+    Fetches and constructs the full text for a list of candidate job IDs.
+    """
+    conn = get_db_connection()
+    if not conn: return {}
+    
+    job_texts = {}
+    try:
+        with conn.cursor() as cur:
+            cur.execute("""
+                SELECT jp.id, COALESCE(jp.title, '') || ' ' || COALESCE(jp.job_description, '') || ' ' || COALESCE(STRING_AGG(s.name, ' '), '') as job_text
+                FROM job_postings jp
+                LEFT JOIN job_skill js ON jp.id = js.job_id
+                LEFT JOIN skills s ON js.skill_id = s.id
+                WHERE jp.id = ANY(%s)
+                GROUP BY jp.id
+            """, (job_ids,))
+            
+            for job_id, full_text in cur.fetchall():
+                job_texts[job_id] = full_text
+    except Exception as e:
+        print(f"Error building job texts for reranking: {e}")
+    finally:
+        if conn: conn.close()
+    return job_texts
+
 # --- 4. REVISED: MAIN RECOMMENDATION PIPELINE ---
-def get_recommendations_for_user(user_id: int, top_k: int = 10) -> list[dict]:
+def get_recommendations_for_user(user_id: int, top_k: int = 10, retrieval_k: int = 50, use_reranker: bool = False) -> list[dict]:
     """
-    The complete, reusable recommendation pipeline using the new weighted scoring.
+    The complete recommendation pipeline with an optional cross-encoder re-ranking stage.
+
+    Args:
+        user_id: The ID of the user.
+        top_k: The final number of recommendations to return.
+        retrieval_k: The number of initial candidates to retrieve for re-ranking.
+        use_reranker: If True, enables the high-accuracy cross-encoder stage.
     """
-    # Stage 1: Candidate Generation (The Sieve)
+    # Stage 1: Candidate Generation (The Sieve) - Unchanged
     candidate_ids = get_filtered_job_ids(user_id)
     if not candidate_ids: return []
 
-    # Stage 2: Semantic Similarity Ranking (The Magnet)
+    # Stage 2: Initial Retrieval (Bi-Encoder "Magnet")
     user_vector = get_user_vector(user_id)
     if user_vector is None: return []
 
     candidate_faiss_indices = [job_id_to_faiss_idx[job_id] for job_id in candidate_ids if job_id in job_id_to_faiss_idx]
     if not candidate_faiss_indices: return []
 
+    # Retrieve a larger pool of candidates for the bi-encoder
+    # The number to retrieve is the max of what we need for re-ranking or the final list
+    num_to_retrieve = retrieval_k if use_reranker else top_k
+    
     candidate_vectors = faiss_index.reconstruct_batch(np.array(candidate_faiss_indices, dtype=np.int64))
     user_vector_2d = np.array([user_vector]).astype('float32')
     similarities = cosine_similarity(user_vector_2d, candidate_vectors)[0]
     
-    # Initial candidates with just semantic scores
-    semantic_candidates = [{"job_id": candidate_ids[i], "semantic_score": float(similarities[i])} for i in range(len(candidate_faiss_indices))]
+    # Get the top `num_to_retrieve` candidates based on bi-encoder scores
+    top_indices = np.argsort(similarities)[-num_to_retrieve:][::-1]
+    retrieved_candidates = [{"job_id": candidate_ids[i], "semantic_score": float(similarities[i])} for i in top_indices]
     
-    # Stage 3: Weighted Re-ranking
-    rescored_candidates = _calculate_scores_for_candidates(user_id, semantic_candidates)
+    final_recs = []
     
-    # Sort by the new final_score
-    final_recs = sorted(rescored_candidates, key=lambda x: x.get('final_score', 0), reverse=True)[:top_k]
-    
-    if not final_recs: return []
+    # --- Stage 3: Optional Re-ranking (Cross-Encoder) ---
+    if use_reranker and cross_encoder_model:
+        print(f"--- Re-ranking {len(retrieved_candidates)} candidates for user {user_id} with Cross-Encoder ---")
+        user_text = _build_user_text(user_id)
+        retrieved_job_ids = [c['job_id'] for c in retrieved_candidates]
+        job_texts_map = _build_job_texts_for_reranking(retrieved_job_ids)
+        
+        # Create pairs of [user_text, job_text]
+        sentence_pairs = [[user_text, job_texts_map.get(job_id, "")] for job_id in retrieved_job_ids]
+        
+        # Get new, more accurate scores from the cross-encoder
+        cross_encoder_scores = cross_encoder_model.predict(sentence_pairs)
+        
+        # Combine jobs with their new scores
+        for i, candidate in enumerate(retrieved_candidates):
+            candidate['final_score'] = float(cross_encoder_scores[i])
+        
+        # Sort by the new cross-encoder score and take the top_k
+        final_recs = sorted(retrieved_candidates, key=lambda x: x['final_score'], reverse=True)[:top_k]
+    else:
+        # If not re-ranking, just use the bi-encoder results
+        for candidate in retrieved_candidates:
+            candidate['final_score'] = candidate['semantic_score'] # Use semantic score as final
+        final_recs = retrieved_candidates
 
     # Stage 4: Enrich with Details for final output
     final_job_ids = [rec['job_id'] for rec in final_recs]
