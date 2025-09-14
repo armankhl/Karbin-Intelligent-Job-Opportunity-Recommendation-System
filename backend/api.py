@@ -497,19 +497,16 @@ def get_categories():
     finally:
         conn.close()
 
-
 @app.route('/api/recommendations', methods=['GET'])
 @jwt_required()
 def get_recommendations():
     """
     A thin wrapper that calls the reusable recommendation service.
     """
-    if faiss_index is None:
-        return jsonify({"error": "Recommendation service is unavailable"}), 503
-    
     current_user_id = int(get_jwt_identity())
     top_k = request.args.get('top_k', default=10, type=int)
     
+    # The powerful logic is now fully contained in the service function
     recommendations = get_recommendations_for_user(current_user_id, top_k=top_k)
     
     return jsonify(recommendations)
@@ -532,7 +529,6 @@ def get_jobs():
     current_user_id = get_jwt_identity()
     
     # --- 2. Build Dynamic SQL Query ---
-    # ... (This part of the code is unchanged) ...
     base_query = """
         SELECT jp.id, jp.title, c.name as company_name, jp.province, cat.name as category_name,
                jp.scraped_at, jp.salary, jp.source_link

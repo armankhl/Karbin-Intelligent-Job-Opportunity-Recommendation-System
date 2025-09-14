@@ -24,26 +24,42 @@ def main(user_id: int, count: int):
     """
     print(f"--- Starting Recommendation Email Sender for User ID: {user_id} ---")
     
-    # 1. Fetch user's name and email from the database
+    # 1. Fetch user's email and name from the database using a JOIN
     conn = psycopg2.connect(
         host=os.getenv('DB_HOST'), port=os.getenv('DB_PORT'),
         dbname=os.getenv('DB_NAME'), user=os.getenv('DB_USER'),
         password=os.getenv('DB_PASSWORD')
     )
-    user_email, user_name = None, "User"
+    user_email, user_name = None, "کاربر گرامی" # A more polite default name
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT email, name FROM users WHERE id = %s", (user_id,))
+            # --- THE FIX IS HERE ---
+            # We use a LEFT JOIN to get the email from 'users' and the first_name
+            # from 'user_profiles'. This handles users who haven't created a profile yet.
+            cur.execute("""
+                SELECT u.email, up.first_name
+                FROM users u
+                LEFT JOIN user_profiles up ON u.id = up.user_id
+                WHERE u.id = %s
+            """, (user_id,))
+            
             user_record = cur.fetchone()
             if not user_record:
                 print(f"Error: User with ID {user_id} not found.")
                 return
-            user_email, user_name = user_record
+            
+            # Unpack the results and provide a fallback for the name
+            user_email = user_record[0]
+            fetched_name = user_record[1]
+            if fetched_name:
+                user_name = fetched_name
+
     except Exception as e:
         print(f"Database error fetching user info: {e}")
         return
     finally:
-        conn.close()
+        if conn:
+            conn.close()
 
     # 2. Get recommendations using the refactored service function
     print(f"Generating top {count} recommendations for {user_email}...")

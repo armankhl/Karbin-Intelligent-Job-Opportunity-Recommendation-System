@@ -3,7 +3,7 @@ import axios from 'axios';
 import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
-import './RecommendedJobsPage.css'; // We will create this CSS
+import './RecommendedJobsPage.css';
 
 const RecommendedJobsPage = () => {
     const [recommendations, setRecommendations] = useState([]);
@@ -21,16 +21,18 @@ const RecommendedJobsPage = () => {
 
             try {
                 const token = localStorage.getItem('authToken');
-                // Fetch a larger number of jobs (e.g., 12) for a full page view
-                const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=100', {
+                
+                // top_k=24 is a reasonable number for a dedicated recommendations page.
+                const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=24', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
                 setRecommendations(response.data);
+
             } catch (err) {
                 setError('خطا در دریافت پیشنهادات. لطفا دوباره تلاش کنید.');
                 console.error(err);
                 if (err.response && [401, 422].includes(err.response.status)) {
-                    logout(); // Log out if the token is invalid
+                    logout();
                 }
             } finally {
                 setLoading(false);
@@ -60,19 +62,26 @@ const RecommendedJobsPage = () => {
     
         return (
             <div className="job-grid">
-                {recommendations.map(job => (
-                    <div key={job.id} className="job-card">
-                        <h3>{job.title}</h3>
-                        <p className="job-card-info">🏢 {job.company_name}</p>
-                        <p className="job-card-info">📍 {job.city || 'نامشخص'}</p>
-                        <p className="job-card-info reason">
-                            ✨ {job.reason} (Score: {job.score.toFixed(2)})
-                        </p>
-                        <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
-                            مشاهده جزئیات
-                        </a>
-                    </div>
-                ))}
+                {recommendations.map(job => {
+                    const matched_skills = job.reason?.matched_skills || [];
+                    const reason_text = matched_skills.length > 0 
+                        ? `متناسب با مهارت‌های شما در: ${matched_skills.join(', ')} ` 
+                        : "شباهت بالا با رزومه شما";
+    
+                    return (
+                        <div key={job.id} className="job-card">
+                            <h3>{job.title}</h3>
+                            <p className="job-card-info">🏢 {job.company_name}</p>
+                            <p className="job-card-info">📍 {job.city || 'نامشخص'}</p>
+                            <p className="job-card-info reason">
+                                ✨ {reason_text} (درصد اطمینان: {job.score.toFixed(2)})
+                            </p>
+                            <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
+                                مشاهده جزئیات
+                            </a>
+                        </div>
+                    );
+                })}
             </div>
         );
     };
