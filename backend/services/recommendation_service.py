@@ -1,38 +1,28 @@
-# services/recommendation_service.py
 import os
 import psycopg2
 import numpy as np
+from datetime import datetime, timezone
 from dotenv import load_dotenv
 from services.embedding_service import embed_texts
 import faiss
 from sklearn.metrics.pairwise import cosine_similarity
 
-# --- 1. CONFIGURATION & DATABASE ---
+# --- 1. CONFIGURATION & ARTIFACT LOADING ---
 load_dotenv()
 
-# --- 3. LOAD MACHINE LEARNING ARTIFACTS AT STARTUP ---
-# This is crucial for performance, preventing file I/O on every request.
 FAISS_INDEX_PATH = os.path.join('data', 'job_index.faiss')
 JOB_ID_MAP_PATH = os.path.join('data', 'job_id_map.npy')
 faiss_index = None
 job_id_map = None
+job_id_to_faiss_idx = {}
 
 try:
-    print("Loading FAISS index...")
     faiss_index = faiss.read_index(FAISS_INDEX_PATH)
-    print(f"FAISS index loaded. Contains {faiss_index.ntotal} vectors.")
-    
-    print("Loading job ID map...")
     job_id_map = np.load(JOB_ID_MAP_PATH)
-    print("Job ID map loaded successfully.")
-        
-    # Create a reverse map for quick lookups: DB Job ID -> FAISS Index Position
     job_id_to_faiss_idx = {job_id: i for i, job_id in enumerate(job_id_map)}
-
-except FileNotFoundError:
-    print("CRITICAL WARNING: FAISS index or job ID map or TF-IDF artifacts not found. Recommendation endpoint will be disabled.")
+    print("Recommendation service: FAISS index and maps loaded successfully.")
 except Exception as e:
-    print(f"An error occurred while loading recommendation artifacts: {e}")
+    print(f"CRITICAL WARNING (recommendation_service): Could not load artifacts: {e}")
 
 
 def get_db_connection():
@@ -194,43 +184,116 @@ def get_filtered_job_ids(user_id: int, min_skill_overlap: int = 0) -> list[int]:
         if conn: conn.close()
         
     return candidate_job_ids
-# ... (keep all existing functions like get_user_vector, get_filtered_job_ids) ...
 
+
+# --- 3. NEW: WEIGHTED SCORING & REASONING LOGIC ---
+def _calculate_scores_for_candidates(user_id: int, candidates: list[dict]) -> list[dict]:
+    """
+    Takes a list of candidates (with job_id and semantic_score) and enriches
+    it with skill overlap, recency, and a final weighted score.
+    """
+    if not candidates:
+        return []
+
+    conn = get_db_connection()
+    if not conn: return candidates # Return with just semantic scores if DB fails
+
+    candidate_ids = [c['job_id'] for c in candidates]
+    
+    try:
+        with conn.cursor() as cur:
+            # 1. Get user's skills
+            cur.execute("SELECT skill_id FROM user_skills WHERE user_id = %s", (user_id,))
+            user_skill_ids = {row[0] for row in cur.fetchall()}
+
+            # 2. Get skills and post date for all candidate jobs
+            cur.execute("""
+                SELECT js.job_id, js.skill_id, jp.scraped_at
+                FROM job_skill js
+                JOIN job_postings jp ON js.job_id = jp.id
+                WHERE js.job_id = ANY(%s)
+            """, (candidate_ids,))
+            
+            job_data_map = {}
+            for job_id, skill_id, scraped_at in cur.fetchall():
+                if job_id not in job_data_map:
+                    job_data_map[job_id] = {'skills': set(), 'scraped_at': scraped_at}
+                job_data_map[job_id]['skills'].add(skill_id)
+
+            # 3. Calculate scores for each candidate
+            enriched_candidates = []
+            for candidate in candidates:
+                job_id = candidate['job_id']
+                job_info = job_data_map.get(job_id)
+
+                if not job_info: continue # Skip if job has no skills/data
+
+                # Calculate skill_overlap_score
+                matched_skills = user_skill_ids.intersection(job_info['skills'])
+                required_skills_count = len(job_info['skills'])
+                skill_overlap_score = len(matched_skills) / required_skills_count if required_skills_count > 0 else 0
+                
+                # Calculate recency_score
+                days_since_posted = (datetime.now(timezone.utc) - job_info['scraped_at']).days
+                recency_score = max(0, 1 - (days_since_posted / 45.0))
+
+                # Calculate final weighted score
+                final_score = (0.6 * candidate['semantic_score']) + \
+                              (0.3 * skill_overlap_score) + \
+                              (0.1 * recency_score)
+                
+                candidate['final_score'] = final_score
+                candidate['reasoning'] = {
+                    "matched_skills_count": len(matched_skills),
+                    "skill_score": skill_overlap_score,
+                    "recency_score": recency_score
+                }
+                enriched_candidates.append(candidate)
+                
+            return enriched_candidates
+
+    except Exception as e:
+        print(f"Error calculating scores: {e}")
+        # Fallback: return original candidates if scoring fails
+        return candidates
+    finally:
+        if conn: conn.close()
+
+
+# --- 4. REVISED: MAIN RECOMMENDATION PIPELINE ---
 def get_recommendations_for_user(user_id: int, top_k: int = 10) -> list[dict]:
     """
-    The complete, reusable recommendation pipeline.
-    This function contains the core logic previously in the api.py route.
+    The complete, reusable recommendation pipeline using the new weighted scoring.
     """
-    # NOTE: This requires loading the ML artifacts in the module's scope.
-    # We will do this in the final api.py and send_job_alerts.py files.
-    
-    # --- Stage 1: Candidate Generation (The Sieve) ---
+    # Stage 1: Candidate Generation (The Sieve)
     candidate_ids = get_filtered_job_ids(user_id)
-    if not candidate_ids:
-        return []
+    if not candidate_ids: return []
 
-    # --- Stage 2: Candidate Ranking (The Magnet) ---
+    # Stage 2: Semantic Similarity Ranking (The Magnet)
     user_vector = get_user_vector(user_id)
-    if user_vector is None:
-        return []
+    if user_vector is None: return []
 
     candidate_faiss_indices = [job_id_to_faiss_idx[job_id] for job_id in candidate_ids if job_id in job_id_to_faiss_idx]
-    if not candidate_faiss_indices:
-        return []
+    if not candidate_faiss_indices: return []
 
     candidate_vectors = faiss_index.reconstruct_batch(np.array(candidate_faiss_indices, dtype=np.int64))
     user_vector_2d = np.array([user_vector]).astype('float32')
     similarities = cosine_similarity(user_vector_2d, candidate_vectors)[0]
     
-    scored_candidates = [{"job_id": candidate_ids[i], "score": float(similarities[i])} for i in range(len(candidate_faiss_indices))]
-    final_recs = sorted(scored_candidates, key=lambda x: x['score'], reverse=True)[:top_k]
+    # Initial candidates with just semantic scores
+    semantic_candidates = [{"job_id": candidate_ids[i], "semantic_score": float(similarities[i])} for i in range(len(candidate_faiss_indices))]
     
-    if not final_recs:
-        return []
+    # Stage 3: Weighted Re-ranking
+    rescored_candidates = _calculate_scores_for_candidates(user_id, semantic_candidates)
+    
+    # Sort by the new final_score
+    final_recs = sorted(rescored_candidates, key=lambda x: x.get('final_score', 0), reverse=True)[:top_k]
+    
+    if not final_recs: return []
 
-    # --- Stage 3: Enrich with Details and Reasoning ---
+    # Stage 4: Enrich with Details for final output
     final_job_ids = [rec['job_id'] for rec in final_recs]
-    scores_map = {rec['job_id']: rec['score'] for rec in final_recs}
+    scores_map = {rec['job_id']: rec for rec in final_recs}
     
     conn = get_db_connection()
     if not conn: return []
@@ -238,14 +301,22 @@ def get_recommendations_for_user(user_id: int, top_k: int = 10) -> list[dict]:
     results = []
     try:
         with conn.cursor() as cur:
-            cur.execute("SELECT s.name FROM skills s JOIN user_skills us ON s.id = us.skill_id WHERE us.user_id = %s", (user_id,))
-            user_skills = {row[0] for row in cur.fetchall()}
-            
-            cur.execute("SELECT js.job_id, s.name FROM skills s JOIN job_skill js ON s.id = js.skill_id WHERE js.job_id = ANY(%s)", (final_job_ids,))
+            # Get skill names for the "reason" field
+            cur.execute("""
+                SELECT us.user_id, s.name FROM skills s
+                JOIN user_skills us ON s.id = us.skill_id WHERE us.user_id = %s
+            """, (user_id,))
+            user_skill_names = {row[1] for row in cur.fetchall()}
+
+            cur.execute("""
+                SELECT js.job_id, s.name FROM skills s JOIN job_skill js ON s.id = js.skill_id
+                WHERE js.job_id = ANY(%s)
+            """, (final_job_ids,))
             job_skills_map = {job_id: set() for job_id in final_job_ids}
             for job_id, skill_name in cur.fetchall():
                 job_skills_map[job_id].add(skill_name)
             
+            # Get main job details
             cur.execute("""
                 SELECT jp.id, jp.title, c.name AS company_name, jp.city, jp.source_link
                 FROM job_postings jp JOIN companies c ON jp.company_id = c.id
@@ -253,12 +324,15 @@ def get_recommendations_for_user(user_id: int, top_k: int = 10) -> list[dict]:
             """, (final_job_ids,))
             jobs_data = {row[0]: dict(zip([desc[0] for desc in cur.description], row)) for row in cur.fetchall()}
 
+            # Assemble final response
             for job_id in final_job_ids:
                 if job_id in jobs_data:
                     job_info = jobs_data[job_id]
-                    job_info['score'] = scores_map[job_id]
-                    matching_skills = user_skills.intersection(job_skills_map.get(job_id, set()))
-                    job_info['reason'] = f"Matches skills: {', '.join(matching_skills)}" if matching_skills else "Strong profile match"
+                    job_info['score'] = scores_map[job_id].get('final_score', 0)
+                    
+                    matching_skills = user_skill_names.intersection(job_skills_map.get(job_id, set()))
+                    job_info['reason'] = { "matched_skills": list(matching_skills) }
+                        
                     results.append(job_info)
     except Exception as e:
         print(f"Enrichment error: {e}")
@@ -266,6 +340,7 @@ def get_recommendations_for_user(user_id: int, top_k: int = 10) -> list[dict]:
         conn.close()
 
     return results
+
 
 # --- 4. VERIFICATION BLOCK (UNCHANGED) ---
 if __name__ == "__main__":

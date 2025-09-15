@@ -72,21 +72,22 @@ def send_recommendations_email(recipient_email: str, user_name: str, jobs: list[
     """
     Sends a curated list of job recommendations to a user.
     """
-    # subject = f"{user_name}, here are your personalized job recommendations!"
-    
     subject = f"{user_name} این فرصتهای شغلی مناسب شما هستند."
 
     # --- Build the HTML for the list of jobs ---
     jobs_html = ""
     for job in jobs:
+        
+        matched_skills_list = job.get('reason', {}).get('matched_skills', [])
+        reason_text = f"متناسب با مهارت‌های شما در: {', '.join(matched_skills_list)}" if matched_skills_list else "شباهت بالا با رزومه شما"
         jobs_html += f"""
         <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
             <h3 style="margin: 0 0 10px 0; font-size: 18px;">{job['title']}</h3>
             <p style="margin: 0 0 5px 0; color: #555;">🏢 {job['company_name']}</p>
             <p style="margin: 0 0 15px 0; color: #555;">📍 {job.get('city', 'N/A')}</p>
-            <p style="margin: 0 0 15px 0; color: #007bff; font-size: 14px;">✨ {job['reason']}</p>
+            <p style="margin: 0 0 15px 0; color: #007bff; font-size: 14px;">✨ {reason_text}</p>
             <a href="{job['source_link']}" target="_blank" style="background-color: #000; color: #fff; padding: 10px 15px; text-decoration: none; border-radius: 5px;">
-                View Details
+                مشاهده جزئیات
             </a>
         </div>
         """
@@ -97,7 +98,7 @@ def send_recommendations_email(recipient_email: str, user_name: str, jobs: list[
     <head><meta charset="UTF-8"></head>
     <body style="font-family: 'Vazirmatn', sans-serif; text-align: right; color: #333; background-color: #f9f9f9; padding: 20px;">
         <div style="max-width: 600px; margin: auto; background-color: #fff; border-radius: 12px; padding: 30px;">
-            <h1>سلام {user_name},</h1>
+            <h1>سلام {user_name}</h1>
             <p>بر اساس پروفایل و مهارت‌های شما، این فرصت‌های شغلی جدید را برایتان پیدا کرده‌ایم:</p>
             <hr style="border: 0; border-top: 1px solid #eee; margin: 20px 0;">
             {jobs_html}
