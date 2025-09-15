@@ -20,7 +20,7 @@ const formatSalary = (salary, contract) => {
 };
 
 const RecommendedJobListItem = ({ job }) => {
-    const postedDate = new Date(job.scraped_at).toLocaleDateString('fa-IR');
+    // const postedDate = new Date(job.scraped_at).toLocaleDateString('fa-IR');
     
     // Format the reason text
     const matched_skills = job.reason?.matched_skills || [];
@@ -36,7 +36,7 @@ const RecommendedJobListItem = ({ job }) => {
             <div className="job-item-details">
                 <div className="details-header">
                     <h2 className="job-title">{job.title}</h2>
-                    <span className="posted-date">{postedDate}</span>
+                    {/* <span className="posted-date">{postedDate}</span> */}
                 </div>
                 <div className="details-body">
                     <p className="info-item">🏢 {job.company_name}</p>
