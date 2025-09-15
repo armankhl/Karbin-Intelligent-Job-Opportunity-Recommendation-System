@@ -5,6 +5,9 @@ import numpy as np
 import faiss
 from sklearn.metrics.pairwise import cosine_similarity
 from dotenv import load_dotenv
+from services.recommendation_service import get_recommendations_for_user
+from services.email_service import send_recommendations_email
+
 
 # --- IMPORTANT: These globals must be loaded for the service to work ---
 load_dotenv()
@@ -14,9 +17,11 @@ faiss_index = faiss.read_index(FAISS_INDEX_PATH)
 job_id_map = np.load(JOB_ID_MAP_PATH)
 job_id_to_faiss_idx = {job_id: i for i, job_id in enumerate(job_id_map)}
 
-# Now, import our services
-from services.recommendation_service import get_recommendations_for_user
-from services.email_service import send_recommendations_email
+
+# --- NEW: Define constants for clarity ---
+CANDIDATES_FOR_RERANKING = 50  # Retrieve 50 candidates for the cross-encoder to re-rank
+FINAL_RECOMMENDATIONS_COUNT = 7 # Send the top 7 most accurate results in the email
+
 
 def main(user_id: int, count: int):
     """
@@ -60,14 +65,18 @@ def main(user_id: int, count: int):
     finally:
         if conn:
             conn.close()
-
-    # 2. Get recommendations using the refactored service function
-    print(f"Generating top {count} recommendations for {user_email}...")
-    recommendations = get_recommendations_for_user(user_id, top_k=count)
-
+ # 2. Get Recommendations with Re-ranking Enabled
+    print("Generating high-accuracy recommendations...")
+    recommendations = get_recommendations_for_user(
+        user_id,
+        top_k=count,
+        retrieval_k=CANDIDATES_FOR_RERANKING,
+        use_reranker=True  # <-- THE KEY CHANGE IS HERE
+    )
+    
     if not recommendations:
-        print("No suitable recommendations found for this user. No email will be sent.")
-        return
+        print(f"No suitable recommendations found for user {user_id}. No email will be sent.")
+        return    
 
     # 3. Send the email
     print(f"Found {len(recommendations)} recommendations. Preparing to send email...")

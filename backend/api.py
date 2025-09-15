@@ -531,7 +531,7 @@ def get_jobs():
     # --- 2. Build Dynamic SQL Query ---
     base_query = """
         SELECT jp.id, jp.title, c.name as company_name, jp.province, cat.name as category_name,
-               jp.scraped_at, jp.salary, jp.source_link
+               jp.scraped_at, jp.salary, jp.source_link, jp.contract_type
         FROM job_postings jp
         JOIN companies c ON jp.company_id = c.id
         LEFT JOIN categories cat ON jp.category_id = cat.id
