@@ -1,16 +1,12 @@
 import React from 'react';
 import axios from 'axios';
-import { useAuth } from '../context/AuthContext'; // We need this to check if the user is logged in
+import { useAuth } from '../context/AuthContext';
 
-// We include the helper function here to make the component self-contained.
+// Helper function for formatting salary (unchanged and correct)
 const formatSalary = (salary, contract) => {
     const contractText = contract || 'تمام وقت';
-    if (!salary || salary.toLowerCase() === 'توافقی') {
-        return `قرارداد ${contractText} (حقوق توافقی)`;
-    }
-    if (salary.toLowerCase() === 'قانون کار') {
-        return `قرارداد ${contractText} (طبق قانون کار)`;
-    }
+    if (!salary || salary.toLowerCase() === 'توافقی') return `قرارداد ${contractText} (حقوق توافقی)`;
+    if (salary.toLowerCase() === 'قانون کار') return `قرارداد ${contractText} (طبق قانون کار)`;
     try {
         const number = parseInt(salary, 10);
         if (isNaN(number)) return `قرارداد ${contractText} (حقوق توافقی)`;
@@ -22,31 +18,48 @@ const formatSalary = (salary, contract) => {
 };
 
 const RecommendedJobListItem = ({ job }) => {
-    const { isAuthenticated } = useAuth(); // Get the user's authentication status
-    // const postedDate = new Date(job.scraped_at).toLocaleDateString('fa-IR');
-    
-    // --- NEW: Function to handle the click event ---
+    const { isAuthenticated } = useAuth();
+
     const handleJobClick = () => {
-        // Only log the click if the user is authenticated
         if (isAuthenticated) {
             const token = localStorage.getItem('authToken');
-            
-            // This is a "fire-and-forget" request. We don't wait for the response
-            // before navigating the user, so their experience is instantaneous.
             axios.post('http://127.0.0.1:5000/api/interactions/click', 
                 { job_id: job.id },
                 { headers: { 'Authorization': `Bearer ${token}` } }
             ).catch(error => {
-                // We can log the error to the console for debugging but won't show it to the user.
                 console.error("Failed to log job click:", error);
             });
         }
-    }
-    // Format the reason text
-    const matched_skills = job.reason?.matched_skills || [];
-    const reason_text = matched_skills.length > 0 
-        ? `متناسب با مهارت‌های شما در: ${matched_skills.join(', ')}` 
-        : "شباهت بالا با رزومه شما";
+    };
+
+    // --- NEW: A robust function to generate the rich reason text ---
+    const generateReasonText = () => {
+        const reasonData = job.reason || {};
+        const matched_skills = reasonData.matched_skills || [];
+        const details = reasonData.details || {};
+        
+        let reasonParts = [];
+
+        // Part 1: Add matched skills if they exist
+        if (matched_skills.length > 0) {
+            reasonParts.push(`متناسب با مهارت‌ها: ${matched_skills.join('، ')}`);
+        }
+
+        // Part 2: Add a highlight for very recent jobs
+        if (details.recency_score && details.recency_score > 0.9) {
+            reasonParts.push("اخیراً منتشر شده");
+        }
+
+        // If after checking everything, we have no specific reasons, return a default.
+        if (reasonParts.length === 0) {
+            return "شباهت بالا با پروفایل شما";
+        }
+
+        // Join the parts with a separator for a clean look.
+        return reasonParts.join(' | ');
+    };
+
+    const reason_text = generateReasonText();
 
     return (
         <div className="job-list-item">
@@ -56,19 +69,21 @@ const RecommendedJobListItem = ({ job }) => {
             <div className="job-item-details">
                 <div className="details-header">
                     <h2 className="job-title">{job.title}</h2>
-                    {/* <span className="posted-date">{postedDate}</span> */}
                 </div>
                 <div className="details-body">
-                    <p className="info-item">🏢 {job.company_name}</p>
-                    <p className="info-item">📍 {job.city || 'نامشخص'}</p>
-                    <p className="info-item">📄 {formatSalary(job.salary, job.contract_type)}</p>
-                    <p className="info-item reason">
-                        ✨ {reason_text} (درصد اطمینان: {job.score.toFixed(2)})
-                    </p>
+                    {/* --- REVISED: Changed <p> to <span> for better flexbox alignment --- */}
+                    <span className="info-item">🏢 {job.company_name}</span>
+                    <span className="info-item">📍 {job.city || 'نامشخص'}</span>
+                    <span className="info-item">📄 {formatSalary(job.salary, job.contract_type)}</span>
+                </div>
+                {/* The reason is now on its own line for better readability */}
+                <div className="details-reason">
+                    <span className="info-item reason">
+                        ✨ {reason_text} (امتیاز: {job.score.toFixed(2)})
+                    </span>
                 </div>
             </div>
             <div className="job-item-action">
-                {/* --- REVISED: Added the onClick handler --- */}
                 <a 
                     href={job.source_link} 
                     target="_blank" 
