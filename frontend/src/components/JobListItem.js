@@ -1,6 +1,7 @@
 import React from 'react';
+import axios from 'axios';
+import { useAuth } from '../context/AuthContext'; // We need this to check if the user is logged in
 
-// The helper function for formatting is unchanged and correct.
 const formatSalary = (salary, contract) => {
     const contractText = contract || 'تمام وقت';
     if (!salary || salary.toLowerCase() === 'توافقی') {
@@ -20,7 +21,28 @@ const formatSalary = (salary, contract) => {
 };
 
 const JobListItem = ({ job }) => {
-    const postedDate = new Date(job.scraped_at).toLocaleDateString('fa-IR');
+    const { isAuthenticated } = useAuth(); // Get the user's authentication status
+
+    const postedDate = new Date(job.scraped_at).toLocaleDateDateString('fa-IR');
+
+    // --- NEW: Function to handle the click event ---
+    const handleJobClick = () => {
+        // Only log the click if the user is authenticated
+        if (isAuthenticated) {
+            const token = localStorage.getItem('authToken');
+            
+            // This is a "fire-and-forget" request. We don't wait for the response
+            // before navigating the user, so their experience is instantaneous.
+            axios.post('http://127.0.0.1:5000/api/interactions/click', 
+                { job_id: job.id },
+                { headers: { 'Authorization': `Bearer ${token}` } }
+            ).catch(error => {
+                // We can log the error to the console for debugging but won't show it to the user.
+                console.error("Failed to log job click:", error);
+            });
+        }
+        // The navigation will happen via the href on the anchor tag itself.
+    };
 
     return (
         <div className="job-list-item">
@@ -32,8 +54,6 @@ const JobListItem = ({ job }) => {
                     <h2 className="job-title">{job.title}</h2>
                     <span className="posted-date">{postedDate}</span>
                 </div>
-                {/* --- THE CORE CHANGE IS HERE --- */}
-                {/* We are changing the container to a div and the items to <p> tags */}
                 <div className="details-body">
                     <p className="info-item">🏢 {job.company_name}</p>
                     <p className="info-item">📍 {job.province || 'نامشخص'}</p>
@@ -41,7 +61,14 @@ const JobListItem = ({ job }) => {
                 </div>
             </div>
             <div className="job-item-action">
-                <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="details-button">
+                {/* --- REVISED: Added the onClick handler --- */}
+                <a 
+                    href={job.source_link} 
+                    target="_blank" 
+                    rel="noopener noreferrer" 
+                    className="details-button"
+                    onClick={handleJobClick}
+                >
                     مشاهده جزئیات
                 </a>
             </div>
