@@ -1,6 +1,6 @@
 # KarBin: An Intelligent Job Recommendation System
 
-**_سیستم هوشمند پیشنهاد دهنده فرصت‌های شغلی_**
+**_سیستم هوشمند پیشنهاد دهنده فرصت‌های شغلی "کاربین"_**
 
 [![Python](https://img.shields.io/badge/Python-3.11-3776AB.svg?style=for-the-badge&logo=python)](https://www.python.org/)
 [![Flask](https://img.shields.io/badge/Flask-2.3-000000.svg?style=for-the-badge&logo=flask)](https://flask.palletsprojects.com/)
