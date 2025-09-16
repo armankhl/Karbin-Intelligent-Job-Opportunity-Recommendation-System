@@ -105,53 +105,6 @@ def calculate_novelty(recommended_job_ids: list[int], popularity_map: dict) -> f
         
     return total_novelty / len(recommended_job_ids)
 
-
-# --- NEW: Serendipity Metric ---
-def calculate_serendipity(recommendations: list[dict], user_id: int) -> float:
-    """
-    Calculates the average serendipity of a list of recommended items.
-    Serendipity = A measure of how "unexpectedly useful" an item is.
-    We'll define it as items that are highly relevant but not obvious from the user's direct skills.
-    """
-    conn = get_db_connection()
-    if not conn or not recommendations: return 0.0
-
-    total_serendipity = 0
-    try:
-        with conn.cursor() as cur:
-            # 1. Get the user's explicitly listed skills
-            cur.execute("SELECT skill_id FROM user_skills WHERE user_id = %s", (user_id,))
-            user_skill_ids = {row[0] for row in cur.fetchall()}
-            
-            # 2. Get the skills for all recommended jobs
-            recommended_ids = [rec['id'] for rec in recommendations]
-            cur.execute("SELECT job_id, skill_id FROM job_skill WHERE job_id = ANY(%s)", (recommended_ids,))
-            
-            job_skills_map = {job_id: set() for job_id in recommended_ids}
-            for job_id, skill_id in cur.fetchall():
-                job_skills_map[job_id].add(skill_id)
-
-            # 3. Calculate serendipity for each item
-            for rec in recommendations:
-                job_id = rec['id']
-                relevance_score = rec['score'] # The score from our recommender
-                job_skills = job_skills_map.get(job_id, set())
-                
-                # An item is "obvious" if any of its required skills are in the user's skill set
-                is_obvious = len(user_skill_ids.intersection(job_skills)) > 0
-                
-                # Serendipity is high if the item is relevant but not obvious
-                if not is_obvious and relevance_score > 0.5: # Using 0.5 as a relevance threshold
-                    total_serendipity += relevance_score
-                
-    except Exception as e:
-        print(f"Error calculating serendipity: {e}")
-    finally:
-        if conn: conn.close()
-        
-    return total_serendipity / len(recommendations) if recommendations else 0.0
-
-
 # --- NEW: Ground Truth and Information Retrieval Metrics ---
 def get_ground_truth(user_id: int, relevance_threshold: int) -> set:
     """
@@ -231,7 +184,6 @@ def evaluate_persona(user_id: int, job_popularity_map: dict, ground_truth_ids: s
         recommended_vectors = faiss_index.reconstruct_batch(np.array(rec_faiss_indices, dtype=np.int64))
         results["diversity"] = calculate_diversity(recommended_vectors)
         results["novelty"] = calculate_novelty(recommended_ids, job_popularity_map)
-        results["serendipity"] = calculate_serendipity(recommendations, user_id)
         
     return results
 
@@ -275,20 +227,18 @@ def main():
             # --- REVISED: Print the comparative report with new metrics ---
             print("\n--- Comparative Report ---")
             report_data = {
-                "Metric": ["Precision@10", "Recall@10", "Diversity", "Novelty", "Serendipity"],
+                "Metric": ["Precision@10", "Recall@10", "Diversity", "Novelty"],
                 "Bi-Encoder Only": [
                     f"{bi_encoder_results['precision']:.2%}" if isinstance(bi_encoder_results['precision'], float) else "N/A",
                     f"{bi_encoder_results['recall']:.2%}" if isinstance(bi_encoder_results['recall'], float) else "N/A",
                     f"{bi_encoder_results['diversity']:.4f}" if isinstance(bi_encoder_results['diversity'], float) else "N/A",
                     f"{bi_encoder_results['novelty']:.4f}" if isinstance(bi_encoder_results['novelty'], float) else "N/A",
-                    f"{bi_encoder_results['serendipity']:.4f}" if isinstance(bi_encoder_results['serendipity'], float) else "N/A"
                 ],
                 "Bi + Cross-Encoder": [
                     f"{cross_encoder_results['precision']:.2%}" if isinstance(cross_encoder_results['precision'], float) else "N/A",
                     f"{cross_encoder_results['recall']:.2%}" if isinstance(cross_encoder_results['recall'], float) else "N/A",
                     f"{cross_encoder_results['diversity']:.4f}" if isinstance(cross_encoder_results['diversity'], float) else "N/A",
                     f"{cross_encoder_results['novelty']:.4f}" if isinstance(cross_encoder_results['novelty'], float) else "N/A",
-                    f"{cross_encoder_results['serendipity']:.4f}" if isinstance(cross_encoder_results['serendipity'], float) else "N/A"
                 ]
             }
             df = pd.DataFrame(report_data)
