@@ -4,12 +4,16 @@ import { useAuth } from '../context/AuthContext';
 import Header from '../components/Header';
 import Footer from '../components/Footer';
 import './RecommendedJobsPage.css';
+import RecommendedJobListItem from '../components/RecommendedJobListItem'; // <-- Import the CORRECT component
+
+const JOBS_PER_PAGE = 5;
 
 const RecommendedJobsPage = () => {
-    const [recommendations, setRecommendations] = useState([]);
+    const [allRecommendations, setAllRecommendations] = useState([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState('');
     const { isAuthenticated, logout } = useAuth();
+    const [currentPage, setCurrentPage] = useState(1);
 
     useEffect(() => {
         const fetchRecommendations = async () => {
@@ -18,16 +22,12 @@ const RecommendedJobsPage = () => {
                 setError("برای مشاهده این صفحه باید وارد شوید.");
                 return;
             }
-
             try {
                 const token = localStorage.getItem('authToken');
-                
-                // top_k=24 is a reasonable number for a dedicated recommendations page.
                 const response = await axios.get('http://127.0.0.1:5000/api/recommendations?top_k=24', {
                     headers: { 'Authorization': `Bearer ${token}` }
                 });
-                setRecommendations(response.data);
-
+                setAllRecommendations(response.data);
             } catch (err) {
                 setError('خطا در دریافت پیشنهادات. لطفا دوباره تلاش کنید.');
                 console.error(err);
@@ -38,20 +38,33 @@ const RecommendedJobsPage = () => {
                 setLoading(false);
             }
         };
-
         fetchRecommendations();
     }, [isAuthenticated, logout]);
 
+    
+    // --- Pagination Logic ---
+    const totalPages = Math.ceil(allRecommendations.length / JOBS_PER_PAGE);
+    const startIndex = (currentPage - 1) * JOBS_PER_PAGE;
+    const endIndex = startIndex + JOBS_PER_PAGE;
+    const currentJobs = allRecommendations.slice(startIndex, endIndex);
+
+    
+    const handleNextPage = () => {
+        if (currentPage < totalPages) {
+            setCurrentPage(currentPage + 1);
+        }
+    };
+    
+    const handlePrevPage = () => {
+        if (currentPage > 1) {
+            setCurrentPage(currentPage - 1);
+        }
+    };
+
     const renderContent = () => {
-        if (loading) {
-            return <p className="status-message">در حال بارگذاری پیشنهادات شغلی برای شما...</p>;
-        }
-    
-        if (error) {
-            return <p className="status-message error">{error}</p>;
-        }
-    
-        if (recommendations.length === 0) {
+        if (loading) { return <p className="status-message">در حال بارگذاری پیشنهادات شغلی برای شما...</p>; }
+        if (error) { return <p className="status-message error">{error}</p>; }
+        if (allRecommendations.length === 0) {
             return (
                 <div className="no-results">
                     <h2>پیشنهاد مناسبی یافت نشد</h2>
@@ -61,28 +74,24 @@ const RecommendedJobsPage = () => {
         }
     
         return (
-            <div className="job-grid">
-                {recommendations.map(job => {
-                    const matched_skills = job.reason?.matched_skills || [];
-                    const reason_text = matched_skills.length > 0 
-                        ? `متناسب با مهارت‌های شما در: ${matched_skills.join(', ')} ` 
-                        : "شباهت بالا با رزومه شما";
-    
-                    return (
-                        <div key={job.id} className="job-card">
-                            <h3>{job.title}</h3>
-                            <p className="job-card-info">🏢 {job.company_name}</p>
-                            <p className="job-card-info">📍 {job.city || 'نامشخص'}</p>
-                            <p className="job-card-info reason">
-                                ✨ {reason_text} (درصد اطمینان: {job.score.toFixed(2)})
-                            </p>
-                            <a href={job.source_link} target="_blank" rel="noopener noreferrer" className="job-details-link">
-                                مشاهده جزئیات
-                            </a>
-                        </div>
-                    );
-                })}
-            </div>
+            <>
+                <div className="job-list">
+                    {currentJobs.map(job => (
+                        <RecommendedJobListItem key={job.id} job={job} />
+                    ))}
+                </div>
+                {totalPages > 1 && (
+                    <div className="pagination-controls">
+                        <button onClick={handlePrevPage} disabled={currentPage <= 1}>
+                            صفحه قبل
+                        </button>
+                        <span>صفحه {currentPage} از {totalPages}</span>
+                        <button onClick={handleNextPage} disabled={currentPage >= totalPages}>
+                            صفحه بعد
+                        </button>
+                    </div>
+                )}
+            </>
         );
     };
 

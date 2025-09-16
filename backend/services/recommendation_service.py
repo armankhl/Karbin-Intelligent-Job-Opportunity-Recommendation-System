@@ -300,65 +300,56 @@ def _build_job_texts_for_reranking(job_ids: list[int]) -> dict:
 # --- 4. REVISED: MAIN RECOMMENDATION PIPELINE ---
 def get_recommendations_for_user(user_id: int, top_k: int = 10, retrieval_k: int = 50, use_reranker: bool = False) -> list[dict]:
     """
-    The complete recommendation pipeline with an optional cross-encoder re-ranking stage.
-
-    Args:
-        user_id: The ID of the user.
-        top_k: The final number of recommendations to return.
-        retrieval_k: The number of initial candidates to retrieve for re-ranking.
-        use_reranker: If True, enables the high-accuracy cross-encoder stage.
+    The complete recommendation pipeline that NOW CORRECTLY USES the weighted scoring function.
     """
-    # Stage 1: Candidate Generation (The Sieve) - Unchanged
+    # Stage 1: Candidate Generation (Sieve)
     candidate_ids = get_filtered_job_ids(user_id)
     if not candidate_ids: return []
 
-    # Stage 2: Initial Retrieval (Bi-Encoder "Magnet")
+    # Stage 2: Initial Retrieval (Bi-Encoder)
     user_vector = get_user_vector(user_id)
     if user_vector is None: return []
 
     candidate_faiss_indices = [job_id_to_faiss_idx[job_id] for job_id in candidate_ids if job_id in job_id_to_faiss_idx]
     if not candidate_faiss_indices: return []
-
-    # Retrieve a larger pool of candidates for the bi-encoder
-    # The number to retrieve is the max of what we need for re-ranking or the final list
-    num_to_retrieve = retrieval_k if use_reranker else top_k
+    
+    num_to_retrieve = retrieval_k if use_reranker else (top_k * 2) # Retrieve more for better weighted scoring
     
     candidate_vectors = faiss_index.reconstruct_batch(np.array(candidate_faiss_indices, dtype=np.int64))
     user_vector_2d = np.array([user_vector]).astype('float32')
     similarities = cosine_similarity(user_vector_2d, candidate_vectors)[0]
     
-    # Get the top `num_to_retrieve` candidates based on bi-encoder scores
     top_indices = np.argsort(similarities)[-num_to_retrieve:][::-1]
     retrieved_candidates = [{"job_id": candidate_ids[i], "semantic_score": float(similarities[i])} for i in top_indices]
     
     final_recs = []
     
-    # --- Stage 3: Optional Re-ranking (Cross-Encoder) ---
+    # Stage 3: Scoring & Re-ranking
     if use_reranker and cross_encoder_model:
+        # --- Cross-Encoder Path (for Email) ---
         print(f"--- Re-ranking {len(retrieved_candidates)} candidates for user {user_id} with Cross-Encoder ---")
         user_text = _build_user_text(user_id)
         retrieved_job_ids = [c['job_id'] for c in retrieved_candidates]
         job_texts_map = _build_job_texts_for_reranking(retrieved_job_ids)
-        
-        # Create pairs of [user_text, job_text]
         sentence_pairs = [[user_text, job_texts_map.get(job_id, "")] for job_id in retrieved_job_ids]
-        
-        # Get new, more accurate scores from the cross-encoder
         cross_encoder_scores = cross_encoder_model.predict(sentence_pairs)
         
-        # Combine jobs with their new scores
         for i, candidate in enumerate(retrieved_candidates):
             candidate['final_score'] = float(cross_encoder_scores[i])
         
-        # Sort by the new cross-encoder score and take the top_k
         final_recs = sorted(retrieved_candidates, key=lambda x: x['final_score'], reverse=True)[:top_k]
-    else:
-        # If not re-ranking, just use the bi-encoder results
-        for candidate in retrieved_candidates:
-            candidate['final_score'] = candidate['semantic_score'] # Use semantic score as final
-        final_recs = retrieved_candidates
 
-    # Stage 4: Enrich with Details for final output
+    else:
+        # --- Weighted Scoring Path (for Web API) ---
+        # *** THE CORE FIX IS HERE: WE NOW CALL THE SCORING FUNCTION ***
+        rescored_candidates = _calculate_scores_for_candidates(user_id, retrieved_candidates)
+        
+        # Sort by the new final_score
+        final_recs = sorted(rescored_candidates, key=lambda x: x.get('final_score', 0), reverse=True)[:top_k]
+
+    # Stage 4: Enrich with Details (unchanged, but now uses the correct `final_recs`)
+    if not final_recs: return []
+
     final_job_ids = [rec['job_id'] for rec in final_recs]
     scores_map = {rec['job_id']: rec for rec in final_recs}
     
@@ -391,6 +382,7 @@ def get_recommendations_for_user(user_id: int, top_k: int = 10, retrieval_k: int
             """, (final_job_ids,))
             jobs_data = {row[0]: dict(zip([desc[0] for desc in cur.description], row)) for row in cur.fetchall()}
 
+            # --- ENHANCED REASONING ---
             # Assemble final response
             for job_id in final_job_ids:
                 if job_id in jobs_data:
@@ -398,9 +390,13 @@ def get_recommendations_for_user(user_id: int, top_k: int = 10, retrieval_k: int
                     job_info['score'] = scores_map[job_id].get('final_score', 0)
                     
                     matching_skills = user_skill_names.intersection(job_skills_map.get(job_id, set()))
-                    job_info['reason'] = { "matched_skills": list(matching_skills) }
-                        
-                    results.append(job_info)
+                    
+                    # Pass the full reasoning dictionary to the frontend
+                    job_info['reason'] = {
+                        "matched_skills": list(matching_skills),
+                        "details": scores_map[job_id].get('reasoning', {})
+                    }
+                    results.append(job_info)                  
     except Exception as e:
         print(f"Enrichment error: {e}")
     finally:
