@@ -23,7 +23,6 @@ const formatSalary = (salary, contract) => {
 const JobListItem = ({ job }) => {
     const { isAuthenticated } = useAuth(); // Get the user's authentication status
 
-    const postedDate = new Date(job.scraped_at).toLocaleDateDateString('fa-IR');
 
     // --- NEW: Function to handle the click event ---
     const handleJobClick = () => {
@@ -52,7 +51,7 @@ const JobListItem = ({ job }) => {
             <div className="job-item-details">
                 <div className="details-header">
                     <h2 className="job-title">{job.title}</h2>
-                    <span className="posted-date">{postedDate}</span>
+
                 </div>
                 <div className="details-body">
                     <p className="info-item">🏢 {job.company_name}</p>
