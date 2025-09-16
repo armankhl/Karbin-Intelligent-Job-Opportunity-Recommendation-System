@@ -531,7 +531,7 @@ def get_jobs():
     # --- 2. Build Dynamic SQL Query ---
     base_query = """
         SELECT jp.id, jp.title, c.name as company_name, jp.province, cat.name as category_name,
-               jp.scraped_at, jp.salary, jp.source_link
+               jp.scraped_at, jp.salary, jp.source_link, jp.contract_type
         FROM job_postings jp
         JOIN companies c ON jp.company_id = c.id
         LEFT JOIN categories cat ON jp.category_id = cat.id
@@ -624,6 +624,43 @@ def get_jobs():
         return jsonify({"error": "Failed to retrieve jobs"}), 500
     finally:
         if conn: conn.close()
+
+@app.route('/api/interactions/click', methods=['POST'])
+@jwt_required() # This endpoint is protected; only logged-in users can log clicks.
+def log_job_click():
+    """
+    Logs a 'click' interaction when a user clicks on a job posting.
+    """
+    current_user_id = get_jwt_identity()
+    job_id = request.json.get('job_id')
+
+    if not job_id:
+        return jsonify({"error": "job_id is required"}), 400
+
+    conn = get_db_connection()
+    if not conn:
+        return jsonify({"error": "Database connection failed"}), 500
+
+    try:
+        with conn.cursor() as cur:
+            # We don't need to check for duplicates; logging every click can be useful.
+            # However, you could add an ON CONFLICT clause if you only want to log the first click.
+            cur.execute(
+                "INSERT INTO user_job_interactions (user_id, job_id, interaction_type) VALUES (%s, %s, %s)",
+                (current_user_id, job_id, 'click')
+            )
+            conn.commit()
+    except Exception as e:
+        conn.rollback()
+        print(f"Error logging click interaction: {e}")
+        # We return a 200 OK even on error to avoid breaking the user's navigation flow.
+        # The primary action (opening the link) should not fail because of a logging issue.
+        return jsonify({"status": "error"}), 200 
+
+    finally:
+        if conn: conn.close()
+    
+    return jsonify({"status": "logged"}), 200
 
 # --- 6. MAIN EXECUTION BLOCK ---
 if __name__ == '__main__':

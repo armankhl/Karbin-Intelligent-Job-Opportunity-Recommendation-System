@@ -77,18 +77,24 @@ def send_recommendations_email(recipient_email: str, user_name: str, jobs: list[
     # --- Build the HTML for the list of jobs ---
     jobs_html = ""
     for job in jobs:
+        reason_data = job.get('reason', {})
+        matched_skills = reason_data.get('matched_skills', [])
         
-        matched_skills_list = job.get('reason', {}).get('matched_skills', [])
-        reason_text = f"متناسب با مهارت‌های شما در: {', '.join(matched_skills_list)}" if matched_skills_list else "شباهت بالا با رزومه شما"
+        reason_parts = []
+        if matched_skills:
+            reason_parts.append(f"متناسب با مهارت‌های شما در: {', '.join(matched_skills)}")
+        else:
+            reason_parts.append("شباهت بالا با رزومه شما")
+
+        reason_text = " | ".join(reason_parts)
+
         jobs_html += f"""
-        <div style="border: 1px solid #ddd; border-radius: 8px; padding: 15px; margin-bottom: 15px;">
-            <h3 style="margin: 0 0 10px 0; font-size: 18px;">{job['title']}</h3>
-            <p style="margin: 0 0 5px 0; color: #555;">🏢 {job['company_name']}</p>
-            <p style="margin: 0 0 15px 0; color: #555;">📍 {job.get('city', 'N/A')}</p>
+        <div style="...">
+            <h3 style="...">_build_job_texts_for_reranking</h3>
+            <p style="...">🏢 {job['company_name']}</p>
+            <p style="...">📍 {job.get('city', 'N/A')}</p>
             <p style="margin: 0 0 15px 0; color: #007bff; font-size: 14px;">✨ {reason_text}</p>
-            <a href="{job['source_link']}" target="_blank" style="background-color: #000; color: #fff; padding: 10px 15px; text-decoration: none; border-radius: 5px;">
-                مشاهده جزئیات
-            </a>
+            <a href="{job['source_link']}" ...>مشاهده جزئیات</a>
         </div>
         """
 

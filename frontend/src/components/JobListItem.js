@@ -23,6 +23,7 @@ const formatSalary = (salary, contract) => {
 const JobListItem = ({ job }) => {
     const { isAuthenticated } = useAuth(); // Get the user's authentication status
 
+
     // --- NEW: Function to handle the click event ---
     const handleJobClick = () => {
         // Only log the click if the user is authenticated
@@ -50,6 +51,7 @@ const JobListItem = ({ job }) => {
             <div className="job-item-details">
                 <div className="details-header">
                     <h2 className="job-title">{job.title}</h2>
+
                 </div>
                 <div className="details-body">
                     <p className="info-item">🏢 {job.company_name}</p>
